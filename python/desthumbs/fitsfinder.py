@@ -2,12 +2,42 @@ import numpy
 import logging
 import os
 import oracledb
+import configparser
 
 XSIZE_default = 10.0
 YSIZE_default = 10.0
 
 logger = logging.getLogger(__name__)
 
+
+def load_db_config(config_file, profile):
+    config = configparser.ConfigParser()
+    config.read(config_file)
+
+    section = dict(config[profile])
+    section['dsn'] = f'{section["server"]}:{section["port"]}/{section["name"]}'
+    return section
+
+
+def get_archive_root(dbh, schema='prod', verb=False):
+
+    if schema != 'prod':
+        archive_root = "/archive_data/desarchive"
+        return archive_root
+
+    QUERY_ARCHIVE_ROOT = {}
+
+    name = {}
+    name['prod'] = 'desar2home'
+    QUERY_ARCHIVE_ROOT['prod'] = "select root from prod.ops_archive where name='%s'" % name['prod']
+    if verb:
+        SOUT.write("# Getting the archive root name for section: %s\n" % name[schema])
+        SOUT.write("# Will execute the SQL query:\n********\n %s\n********\n" % QUERY_ARCHIVE_ROOT[schema])
+    cur = dbh.cursor()
+    cur.execute(QUERY_ARCHIVE_ROOT[schema])
+    archive_root = cur.fetchone()[0]
+    cur.close()
+    return archive_root
 
 def connect_db(user=None, password=None, dsn=None):
     """

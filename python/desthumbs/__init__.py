@@ -1,2 +1,2 @@
 from . thumbslib  import *
-from . tilefinder import *
+from . fitsfinder import *
