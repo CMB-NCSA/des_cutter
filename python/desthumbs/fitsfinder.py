@@ -7,8 +7,6 @@ import sys
 import collections
 SOUT = sys.stdout
 
-
-
 XSIZE_default = 10.0
 YSIZE_default = 10.0
 
@@ -43,6 +41,7 @@ def get_archive_root(dbh, schema='prod', verb=False):
     archive_root = cur.fetchone()[0]
     cur.close()
     return archive_root
+
 
 def connect_db(user=None, password=None, dsn=None):
     """
@@ -83,6 +82,8 @@ def check_xysize(df, xsize=None, ysize=None):
             ysize = numpy.array([YSIZE_default] * nobj)
 
     return xsize, ysize
+
+
 def query2dict_of_columns(query, dbhandle, array=False):
     """
     Transforms the result of an SQL query and a Database handle object [dhandle]
@@ -112,7 +113,7 @@ def query2dict_of_columns(query, dbhandle, array=False):
     return querydic
 
 
-def query2rec(query, dbhandle, verb=False):
+def query2rec(query, dbhandle):
     """
     Queries DB and returns results as a numpy recarray.
     """
@@ -126,9 +127,10 @@ def query2rec(query, dbhandle, verb=False):
     if tuples:
         names = [d[0] for d in cur.description]
         return numpy.rec.array(tuples, names=names)
-
-    if verb:
-        print("# WARNING DB Query in query2rec() returned no results")
+    else:
+        logger.error("# DB Query in query2rec() returned no results")
+        msg = f"# Error with query:{query}"
+        raise RuntimeError(msg)
     return False
 
 
@@ -166,7 +168,8 @@ def find_tilename_radec(ra, dec, dbh, schema='prod'):
         return tilenames_dict['TILENAME'][0]
     return
 
-#fitsfinder
+
+# fitsfinder
 def find_tilenames_radec(ra, dec, dbh, schema='prod'):
 
     """
@@ -197,7 +200,7 @@ def find_tilenames_radec(ra, dec, dbh, schema='prod'):
 
 
 def get_query(tablename, bands=None, filetypes=None, date_start=None, date_end=None, yearly=None):
-    #Builds the SQL query string for retrieving the metadata from OracleDB
+    # Builds the SQL query string for retrieving the metadata from OracleDB
     query_files_template = """
     SELECT ID, FILEPATH || '/' || FILENAME AS FILE, BAND, DATE_BEG FROM {tablename}
       {where}
@@ -249,19 +252,6 @@ def get_query(tablename, bands=None, filetypes=None, date_start=None, date_end=N
     )
 
 
-def query2rec(query, dbhandle):
-    #Performs the SQL query and returns the numpy recarray
-    cur = dbhandle.cursor()
-    cur.execute(query)
-    tuples = cur.fetchall()
-
-    if tuples:
-        names = [d[0] for d in cur.description]
-        return numpy.rec.array(tuples, names=names)
-    else:
-        logger.error("# DB Query in query2rec() returned no results")
-        raise RuntimeError(f"# Error with query: {query}")
-    
 def get_coaddfiles_tilename_bytag(tilename, dbh, tag, bands='all'):
 
     if bands == 'all':
@@ -283,6 +273,7 @@ def get_coaddfiles_tilename_bytag(tilename, dbh, tag, bands='all'):
     # Return a record array with the query
     return rec
 
+
 def fix_compression(rec):
     """
     Here we fix 'COMPRESSION from None --> '' if present
@@ -293,4 +284,3 @@ def fix_compression(rec):
         compression = ['' if c is None else c for c in rec['COMPRESSION']]
         rec['COMPRESSION'] = numpy.array(compression)
     return rec
-
