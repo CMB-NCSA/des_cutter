@@ -3,6 +3,11 @@ import logging
 import os
 import oracledb
 import configparser
+import sys
+import collections
+SOUT = sys.stdout
+
+
 
 XSIZE_default = 10.0
 YSIZE_default = 10.0
@@ -78,6 +83,117 @@ def check_xysize(df, xsize=None, ysize=None):
             ysize = numpy.array([YSIZE_default] * nobj)
 
     return xsize, ysize
+def query2dict_of_columns(query, dbhandle, array=False):
+    """
+    Transforms the result of an SQL query and a Database handle object [dhandle]
+    into a dictionary of list or numpy arrays if array=True
+    """
+
+    # Get the cursor from the DB handle
+    cur = dbhandle.cursor()
+    # Execute
+    cur.execute(query)
+    # Get them all at once
+    list_of_tuples = cur.fetchall()
+    # Get the description of the columns to make the dictionary
+    desc = [d[0] for d in cur.description]
+
+    querydic = collections.OrderedDict()  # We will populate this one
+    cols = list(zip(*list_of_tuples))
+    for k, val in enumerate(cols):
+        key = desc[k]
+        if array:
+            if isinstance(val[0], str):
+                querydic[key] = numpy.array(val, dtype=object)
+            else:
+                querydic[key] = numpy.array(val)
+        else:
+            querydic[key] = cols[k]
+    return querydic
+
+
+def query2rec(query, dbhandle, verb=False):
+    """
+    Queries DB and returns results as a numpy recarray.
+    """
+    # Get the cursor from the DB handle
+    cur = dbhandle.cursor()
+    # Execute
+    cur.execute(query)
+    tuples = cur.fetchall()
+
+    # Return rec array
+    if tuples:
+        names = [d[0] for d in cur.description]
+        return numpy.rec.array(tuples, names=names)
+
+    if verb:
+        print("# WARNING DB Query in query2rec() returned no results")
+    return False
+
+
+def find_tilename_radec(ra, dec, dbh, schema='prod'):
+
+    if ra < 0:
+        exit("ERROR: Please provide RA>0 and RA<360")
+
+    if schema == "prod":
+        tablename = "COADDTILE_GEOM"
+    elif schema == "des_admin":
+        tablename = "Y6A1_COADDTILE_GEOM"
+    else:
+        raise Exception(f"ERROR: COADDTILE table not defined for schema: {schema}")
+
+    coaddtile_geom = f"{schema}.{tablename}"
+
+    QUERY_TILENAME_RADEC = """
+    select TILENAME from {COADDTILE_GEOM}
+           where (CROSSRA0='N' AND ({RA} BETWEEN RACMIN and RACMAX) AND ({DEC} BETWEEN DECCMIN and DECCMAX)) OR
+                 (CROSSRA0='Y' AND ({RA180} BETWEEN RACMIN-360 and RACMAX) AND ({DEC} BETWEEN DECCMIN and DECCMAX))
+    """
+
+    if ra > 180:
+        ra180 = 360 - ra
+    else:
+        ra180 = ra
+    query = QUERY_TILENAME_RADEC.format(RA=ra, DEC=dec, RA180=ra180, COADDTILE_GEOM=coaddtile_geom)
+    tilenames_dict = query2dict_of_columns(query, dbh, array=False)
+
+    if len(tilenames_dict) < 1:
+        SOUT.write("# WARNING: No tile found at ra:%s, dec:%s\n" % (ra, dec))
+        return False
+    else:
+        return tilenames_dict['TILENAME'][0]
+    return
+
+#fitsfinder
+def find_tilenames_radec(ra, dec, dbh, schema='prod'):
+
+    """
+    Find the tilename for each ra,dec and bundle them as dictionaries per tilename
+    """
+
+    indices = {}
+    tilenames = []
+    tilenames_matched = []
+    for k in range(len(ra)):
+
+        tilename = find_tilename_radec(ra[k], dec[k], dbh, schema=schema)
+        tilenames_matched.append(tilename)
+
+        # Write out the results
+        if not tilename:  # No tilename found
+            # Here we could do something to store the failed (ra,dec) pairs
+            continue
+
+        # Store unique values and initialize list of indices grouped by tilename
+        if tilename not in tilenames:
+            indices[tilename] = []
+            tilenames.append(tilename)
+
+        indices[tilename].append(k)
+
+    return tilenames, indices, tilenames_matched
 
 
 def get_query(tablename, bands=None, filetypes=None, date_start=None, date_end=None, yearly=None):
@@ -145,3 +261,36 @@ def query2rec(query, dbhandle):
     else:
         logger.error("# DB Query in query2rec() returned no results")
         raise RuntimeError(f"# Error with query: {query}")
+    
+def get_coaddfiles_tilename_bytag(tilename, dbh, tag, bands='all'):
+
+    if bands == 'all':
+        and_BANDS = ''
+    else:
+        sbands = "'" + "','".join(bands) + "'"  # trick to format
+        and_BANDS = "BAND in ({BANDS}) and".format(BANDS=sbands)
+
+    QUERY_COADDFILES = """
+    select FILENAME, TILENAME, BAND, FILETYPE, PATH, COMPRESSION
+     from felipe.{TAG}_COADD_FILEPATH
+            where
+              FILETYPE='coadd' and
+              {and_BANDS} TILENAME='{TILENAME}'"""
+
+    query = QUERY_COADDFILES.format(TILENAME=tilename, TAG=tag, and_BANDS=and_BANDS)
+    print(query)
+    rec = query2rec(query, dbh)
+    # Return a record array with the query
+    return rec
+
+def fix_compression(rec):
+    """
+    Here we fix 'COMPRESSION from None --> '' if present
+    """
+    if rec is False:
+        pass
+    elif 'COMPRESSION' in rec.dtype.names:
+        compression = ['' if c is None else c for c in rec['COMPRESSION']]
+        rec['COMPRESSION'] = numpy.array(compression)
+    return rec
+

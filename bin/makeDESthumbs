@@ -2,14 +2,14 @@
 
 import sys
 import traceback
-from desthumbs import makeDESthumbslib
+import desthumbs
 
 if __name__ == "__main__":
     # Get the command-line arguments
-    args = makeDESthumbslib.cmdline()
+    args = desthumbs.makeDESthumbslib.cmdline()
     # Run the maker
     try:
-        makeDESthumbslib.run(args)
+        desthumbs.makeDESthumbslib.run(args)
     except:
         (type, value, my_traceback) = sys.exc_info()
         string_trace = traceback.format_exception(type,value,my_traceback)

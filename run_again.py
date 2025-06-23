@@ -145,7 +145,7 @@ def find_tilename_radec(ra, dec, dbh, schema='prod'):
         return tilenames_dict['TILENAME'][0]
     return
 
-
+#fitsfinder
 def find_tilenames_radec(ra, dec, dbh, schema='prod'):
 
     """
@@ -267,10 +267,10 @@ if __name__ == "__main__":
 
     sout = sys.stdout
 
-    # db_section = 'db-desoper'
-    # schema = 'prod'
+    db_section = 'db-desoper'
+    schema = 'prod'
 
-    db_section = 'db-dessci'
+    # db_section = 'db-dessci'
     schema = 'des_admin'
 
     tag = "Y6A2"
@@ -294,6 +294,8 @@ if __name__ == "__main__":
     # Check the xsize and ysizes
     # xsize, ysize = check_xysize(df, args, nobj)
 
+    #move this into new makeDESthumbslib
+    
     config_file = os.path.join(os.environ['HOME'], 'dbconfig.ini')
     # Get the connection credentials and information
     creds = load_db_config(config_file, db_section)
@@ -327,7 +329,7 @@ if __name__ == "__main__":
 
         # 1. Get all of the filenames for a given tilename
         filenames = get_coaddfiles_tilename_bytag(tilename, dbh, tag, bands=bands)
-        # print(filenames)
+        print(filenames)
         if filenames is False:
             sout.write(f"# Skipping: {tilename} -- not in TAG: {tag} \n")
             continue
