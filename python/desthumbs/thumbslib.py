@@ -243,7 +243,7 @@ def get_headers_hdus(filename):
 
     # Case 2 -- older DESDM files without EXTNAME
     if len(header) < 1:
-        (sci_hdu,wgt_hdu) = get_coadd_hdu_extensions_byfilename(filename)
+        (sci_hdu, wgt_hdu) = get_coadd_hdu_extensions_byfilename(filename)
         fits = fitsio.FITS(filename)
         header['SCI'] = fits[sci_hdu].read_header()
         header['WGT'] = fits[wgt_hdu].read_header()
@@ -253,7 +253,8 @@ def get_headers_hdus(filename):
     return header, hdu
 
 
-def fitscutter(filename, ra, dec, xsize=1.0, ysize=1.0, units='arcmin',prefix='DES',outdir=os.getcwd(),tilename=None,verb=False):
+def fitscutter(filename, ra, dec, xsize=1.0, ysize=1.0, units='arcmin',
+               prefix='DES', outdir=os.getcwd(), tilename=None, verb=False):
 
     """
     Makes cutouts around ra, dec for a give xsize and ysize
@@ -448,15 +449,15 @@ def color_radec(ra,dec,avail_bands,prefix='DES',colorset=['i','r','g'], stiff_pa
         fitsfiles.append( "%s" % fitsthumb)
 
     # Build the cmd to call
-    logfile = get_thumbLogName(ra,dec,prefix=prefix,ext='stifflog',outdir=outdir)
-    log = open(logfile,"w")
-    cmd = make_stiff_call(fitsfiles,tiffname,stiff_parameters={},list=False)
-    print("RUNNING STIFF CMD ", cmd)
-    status = subprocess.call(cmd,shell=True,stdout=log, stderr=log)
-    if status > 0:
-        SOUT.write("***\nERROR while running Stiff***\n")
-    else:
-        if verb: SOUT.write("# Total stiff time: %s\n" % elapsed_time(t0))
+    #logfile = get_thumbLogName(ra,dec,prefix=prefix,ext='stifflog',outdir=outdir)
+    #log = open(logfile,"w")
+    #cmd = make_stiff_call(fitsfiles,tiffname,stiff_parameters={},list=False)
+    #print("RUNNING STIFF CMD ", cmd)
+    #status = subprocess.call(cmd,shell=True,stdout=log, stderr=log)
+    #if status > 0:
+    #    SOUT.write("***\nERROR while running Stiff***\n")
+    #else:
+    #    if verb: SOUT.write("# Total stiff time: %s\n" % elapsed_time(t0))
 
     ## ----------------------------------- ##
 

@@ -174,7 +174,7 @@ def run(args):
     # Find all of the tilenames, indices grouped per tile
     if args.verb:
         sout.write("# Finding tilename for each input position\n")
-    tilenames, indices, tilenames_matched = fitsfinder.find_tilenames_radec(ra,dec,dbh,schema=schema)
+    tilenames, indices, tilenames_matched = fitsfinder.find_tilenames_radec(ra, dec, dbh, schema=schema)
 
     # Add them back to pandas dataframe and write a file
     df['TILENAME'] = tilenames_matched
@@ -183,9 +183,6 @@ def run(args):
     matched_list = os.path.join(args.outdir, 'matched_'+os.path.basename(args.inputList))
     df.to_csv(matched_list, index=False)
     sout.write("# Wrote matched tilenames list to: %s\n" % matched_list)
-
-    # Make sure that all found tilenames *are* in the tag (aka data exists for them)
-    #tilenames_intag = desthumbs.get_tilenames_in_tag(dbh,args.tag)
 
     # Loop over all of the tilenames
     t0 = time.time()
@@ -200,7 +197,6 @@ def run(args):
 
         # 1. Get all of the filenames for a given tilename
         filenames = fitsfinder.get_coaddfiles_tilename_bytag(tilename, dbh, args.tag, bands=args.bands)
-        print(filenames)
 
         if filenames is False:
             sout.write("# Skipping: %s -- not in TAG:%s \n" % (tilename, args.tag))
@@ -228,7 +224,6 @@ def run(args):
             else:
                 filename = os.path.join(archive_root, filenames.PATH[k])
 
-            print(filename)
             ar = (filename, ra[indx], dec[indx])
             kw = {'xsize': xsize[indx], 'ysize': ysize[indx],
                   'units': 'arcmin', 'prefix': args.prefix, 'outdir': args.outdir,
@@ -237,7 +232,7 @@ def run(args):
                 sout.write("# Cutting: %s\n" % filename)
             if args.MP:
                 NP = len(avail_bands)
-                p[filename] = mp.Process(target=thumbslib.fitscutter(args=ar, kwargs=kw))
+                p[filename] = mp.Process(target=thumbslib.fitscutter, args=ar, kwargs=kw)
                 p[filename].start()
             else:
                 NP = 1
@@ -256,7 +251,7 @@ def run(args):
                                   verb=args.verb,
                                   stiff_parameters={'NTHREADS':NP})
 
-        if args.verb: 
+        if args.verb:
             sout.write("# Time %s: %s\n" % (tilename,desthumbs.elapsed_time(t1)))
 
     sout.write("\n*** Grand Total time:%s ***\n" % desthumbs.elapsed_time(t0))
