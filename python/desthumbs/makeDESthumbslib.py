@@ -9,6 +9,7 @@ import multiprocessing as mp
 import desthumbs
 import oracledb
 import desthumbs.fitsfinder as fitsfinder
+import desthumbs.thumbslib as thumbslib
 import argparse
 
 XSIZE_default = 1.0
@@ -236,11 +237,11 @@ def run(args):
                 sout.write("# Cutting: %s\n" % filename)
             if args.MP:
                 NP = len(avail_bands)
-                p[filename] = mp.Process(target=desthumbs.fitscutter, args=ar, kwargs=kw)
+                p[filename] = mp.Process(target=thumbslib.fitscutter(args=ar, kwargs=kw))
                 p[filename].start()
             else:
                 NP = 1
-                desthumbs.fitscutter(*ar, **kw)
+                thumbslib.fitscutter(*ar, **kw)
 
         # Make sure all process are closed before proceeding
         if args.MP:
@@ -255,7 +256,8 @@ def run(args):
                                   verb=args.verb,
                                   stiff_parameters={'NTHREADS':NP})
 
-        if args.verb: sout.write("# Time %s: %s\n" % (tilename,desthumbs.elapsed_time(t1)))
+        if args.verb: 
+            sout.write("# Time %s: %s\n" % (tilename,desthumbs.elapsed_time(t1)))
 
     sout.write("\n*** Grand Total time:%s ***\n" % desthumbs.elapsed_time(t0))
     return

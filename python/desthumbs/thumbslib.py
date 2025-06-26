@@ -11,6 +11,7 @@ import sys
 import desthumbs.astrometry as astrometry
 from astropy.wcs import WCS
 from astropy.utils.exceptions import AstropyWarning
+import desthumbs.wcsutil as wcsutil
 import time
 import numpy
 import subprocess
@@ -18,6 +19,7 @@ from collections import OrderedDict
 import copy
 import logging
 import warnings
+
 SOUT = sys.stdout
 
 # Naming template
@@ -162,7 +164,7 @@ def get_coadd_hdu_extensions_byfilename(filename):
 #     h['DEC_CUTOUT'] = dec
 #     return h
 
-def check_inputs(ra,dec,xsize,ysize):
+def check_inputs(ra, dec, xsize, ysize):
 
     """ Check and fix inputs for cutout"""
     # Make sure that RA,DEC are the same type
@@ -187,7 +189,7 @@ def check_inputs(ra,dec,xsize,ysize):
         raise TypeError('RA, DEC and XSIZE and YSIZE need to be the same length')
     return ra,dec,xsize,ysize
 
-def get_thumbFitsName(ra,dec,filter,prefix='DES',ext='fits',outdir=os.getcwd()):
+def get_thumbFitsName(ra, dec, filter, prefix='DES', ext='fits', outdir=os.getcwd()):
     """ Common function to set the Fits thumbnail name """
     ra  = astrometry.dec2deg(ra/15.,sep="",plussign=False)
     dec = astrometry.dec2deg(dec,   sep="",plussign=True)
@@ -227,7 +229,7 @@ def get_headers_hdus(filename):
 
     # Case 1 -- for well-defined fitsfiles with EXTNAME
     with fitsio.FITS(filename) as fits:
-        for k in xrange(len(fits)):
+        for k in range(len(fits)):
             h = fits[k].read_header()
 
             # Make sure that we can get the EXTNAME
@@ -306,8 +308,8 @@ def fitscutter(filename, ra, dec, xsize=1.0, ysize=1.0, units='arcmin',prefix='D
         x0,y0 = wcs.sky2image(ra[k],dec[k])
         yL = 10000
         xL = 10000
-        x0 = round(x0)
-        y0 = round(y0)
+        x0 = numpy.round(x0)
+        y0 = numpy.round(y0)
         dx = int(0.5*xsize[k]*scale/pixelscale)
         dy = int(0.5*ysize[k]*scale/pixelscale)
         naxis1 = 2*dx#+1
@@ -349,8 +351,8 @@ def fitscutter(filename, ra, dec, xsize=1.0, ysize=1.0, units='arcmin',prefix='D
             naxis1 = numpy.shape(im_section[EXTNAME])[1]
             naxis2 = numpy.shape(im_section[EXTNAME])[0]
             # Update the WCS in the headers and make a copy
-            h_section[EXTNAME] = update_wcs_matrix(header[EXTNAME],x0,y0,naxis1,naxis2,ra[k],dec[k])
-
+            # h_section[EXTNAME] = update_wcs_matrix(header[EXTNAME],x0,y0,naxis1,naxis2,ra[k],dec[k])
+            h_section[EXTNAME] = update_wcs_matrix(header[EXTNAME], x0, y0)
         # Construct the name of the Thumbmail using BAND/FILTER/prefix/etc
         outname = get_thumbFitsName(ra[k],dec[k],band,prefix=prefix,outdir=outdir)
 
@@ -449,6 +451,7 @@ def color_radec(ra,dec,avail_bands,prefix='DES',colorset=['i','r','g'], stiff_pa
     logfile = get_thumbLogName(ra,dec,prefix=prefix,ext='stifflog',outdir=outdir)
     log = open(logfile,"w")
     cmd = make_stiff_call(fitsfiles,tiffname,stiff_parameters={},list=False)
+    print("RUNNING STIFF CMD ", cmd)
     status = subprocess.call(cmd,shell=True,stdout=log, stderr=log)
     if status > 0:
         SOUT.write("***\nERROR while running Stiff***\n")
