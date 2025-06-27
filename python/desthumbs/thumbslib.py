@@ -380,21 +380,21 @@ def get_stiff_parameter_set(tiffname,**kwargs):
     return stiff_parameters
 
 
-def make_stiff_call(fitsfiles,tiffname,stiff_parameters={},list=False):
+def make_stiff_call(fitsfiles, tiffname, stiff_parameters={}, list=False):
 
     """ Make the stiff call for a set of input FITS filenames"""
 
-    pars = get_stiff_parameter_set(tiffname,**stiff_parameters)
-    stiff_conf = os.path.join(os.environ['DESTHUMBS_DIR'],'etc','default.stiff')
+    pars = get_stiff_parameter_set(tiffname, **stiff_parameters)
+    stiff_conf = os.path.join(os.environ['DESTHUMBS_DIR'], 'etc', 'default.stiff')
 
     cmd_list = []
     cmd_list.append("%s" % STIFF_EXE)
     for fname in fitsfiles:
-        cmd_list.append( "%s" % fname)
+        cmd_list.append("%s" % fname)
 
     cmd_list.append("-c %s" % stiff_conf)
-    for param,value in pars.items():
-        cmd_list.append("-%s %s" % (param,value))
+    for param, value in pars.items():
+        cmd_list.append("-%s %s" % (param, value))
 
     if list:
         cmd = cmd_list
@@ -425,12 +425,17 @@ def get_colorset(avail_bands,color_set=None):
         CSET=False
     return CSET
 
-def color_radec(ra,dec,avail_bands,prefix='DES',colorset=['i','r','g'], stiff_parameters={},outdir=os.getcwd(),verb=False):
+
+def color_radec(ra, dec, avail_bands,
+                prefix='DES', colorset=['i', 'r', 'g'],
+                stiff_parameters={},
+                outdir=os.getcwd(),
+                verb=False):
 
     t0 = time.time()
 
     # Get colorset or match with available bands
-    CSET = get_colorset(avail_bands,colorset)
+    CSET = get_colorset(avail_bands, colorset)
 
     if CSET is False:
         SOUT.write("# WARNING: Could not find a suitable filter set for color image for ra,dec: %s,%s\n" % (ra,dec))
@@ -449,15 +454,15 @@ def color_radec(ra,dec,avail_bands,prefix='DES',colorset=['i','r','g'], stiff_pa
         fitsfiles.append( "%s" % fitsthumb)
 
     # Build the cmd to call
-    #logfile = get_thumbLogName(ra,dec,prefix=prefix,ext='stifflog',outdir=outdir)
-    #log = open(logfile,"w")
-    #cmd = make_stiff_call(fitsfiles,tiffname,stiff_parameters={},list=False)
-    #print("RUNNING STIFF CMD ", cmd)
-    #status = subprocess.call(cmd,shell=True,stdout=log, stderr=log)
-    #if status > 0:
-    #    SOUT.write("***\nERROR while running Stiff***\n")
-    #else:
-    #    if verb: SOUT.write("# Total stiff time: %s\n" % elapsed_time(t0))
+    logfile = get_thumbLogName(ra,dec,prefix=prefix,ext='stifflog',outdir=outdir)
+    log = open(logfile,"w")
+    cmd = make_stiff_call(fitsfiles,tiffname,stiff_parameters=stiff_parameters,list=False)
+    print("RUNNING STIFF CMD:\n\t", cmd)
+    status = subprocess.call(cmd,shell=True,stdout=log, stderr=log)
+    if status > 0:
+        SOUT.write("***\nERROR while running Stiff***\n")
+    else:
+        if verb: SOUT.write("# Total stiff time: %s\n" % elapsed_time(t0))
 
     ## ----------------------------------- ##
 
