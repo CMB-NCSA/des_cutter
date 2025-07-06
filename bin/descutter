@@ -10,13 +10,12 @@ if __name__ == "__main__":
     # Run the maker
     try:
         desthumbs.makeDESthumbslib.run(args)
-    except:
+    except Exception:
         (type, value, my_traceback) = sys.exc_info()
-        string_trace = traceback.format_exception(type,value,my_traceback)
+        string_trace = traceback.format_exception(type, value, my_traceback)
         # write string into log
         for line in string_trace:
-            args.sout.write(line) 
+            args.sout.write(line)
 
         # Finally raise
         raise
-

@@ -1,3 +1,5 @@
+import math
+import sys
 """
 
  Taken from Erin Sheldon's esutil package at:
@@ -29,8 +31,7 @@ _license = """
     Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 """
-import math
-import sys
+
 
 try:
     import numpy
@@ -38,7 +39,7 @@ try:
     import scipy.optimize
     from scipy.optimize import leastsq
     have_numpy = True
-except:
+except KeyError:
     have_numpy = False
 
 r2d = 180.0 / math.pi
@@ -180,8 +181,10 @@ class WCS:
 
     def __getitem__(self, key):
         return self.wcs[key]
+
     def __setitem__(self, key, val):
         self.wcs[key] = val
+
     def keys(self):
         return list(self.wcs.keys())
 
@@ -329,7 +332,6 @@ class WCS:
             wcs = wcsutil.WCS(hdr)
             x,y = wcs.image2sky(ra,dec)
         """
-        arescalar = isscalar(lon)
         longitude = numpy.asarray(lon, dtype='f8')
         latitude = numpy.asarray(lat, dtype='f8')
 
@@ -413,8 +415,6 @@ class WCS:
         latitude *= r2d
 
         longitude, latitude = self.Rotate(longitude, latitude, reverse=True)
-
-
         # Make sure the result runs from 0 to 360
         if scalar:
             if longitude < 0.0:
@@ -432,7 +432,6 @@ class WCS:
                 longitude[w] -= 360.0
 
         return longitude, latitude
-
 
     def sph2image(self, longitude, latitude):
         """
@@ -493,29 +492,28 @@ class WCS:
 
         # IDL array construction is transposed compared to python apparently
         # So this is reversed from the idl routines
-        r = numpy.array([[-sa * sp - ca * cp * sd, sa * cp - ca * sp *sd, ca * cd],
+        r = numpy.array([[-sa * sp - ca * cp * sd, sa * cp - ca * sp * sd, ca * cd],
                          [ca * sp - sa * cp * sd, -ca * cp - sa * sp * sd, sa * cd],
                          [cp * cd, sp * cd, sd]],
                         dtype='f8')
 
         return r
 
-
     def _rotate(self, longitude, latitude, r):
         """
         Apply a rotation matrix to the input longitude and latitude
         inputs must be numpy arrays
         """
-        l = numpy.cos(latitude) * numpy.cos(longitude)
+        lat = numpy.cos(latitude) * numpy.cos(longitude)
         m = numpy.cos(latitude) * numpy.sin(longitude)
         n = numpy.sin(latitude)
 
         # find solution to the system of equations and put it in b
         # Can't use matrix notation in case l,m,n are rrays
 
-        b0 = r[0, 0] * l + r[1, 0] * m + r[2, 0] * n
-        b1 = r[0, 1] * l + r[1, 1] * m + r[2, 1] * n
-        b2 = r[0, 2] * l + r[1, 2] * m + r[2, 2] * n
+        b0 = r[0, 0] * lat + r[1, 0] * m + r[2, 0] * n
+        b1 = r[0, 1] * lat + r[1, 1] * m + r[2, 1] * n
+        b2 = r[0, 2] * lat + r[1, 2] * m + r[2, 2] * n
 
         # Account for possible roundoff
         b2 = numpy.clip(b2, -1.0, 1.0)
@@ -524,12 +522,11 @@ class WCS:
         lon_new = numpy.arctan2(b1, b0) * r2d
 
         # there are no unittests so added this to make sure the new version works ok
-        #if False:
+        # if False:
         #    lat_new_old = numpy.arcsin(b2)*r2d
         #    assert numpy.allclose(lat_new_old,lat_new),"New WCS arctan function not working!"
 
         return lon_new, lat_new
-
 
     def _lonlatdiff(self, xy):
         x = numpy.array(xy[0])
@@ -591,8 +588,8 @@ class WCS:
         # Use inversion without distortion as our guess
         xyguess[0], xyguess[1] = self.sky2image(lon, lat, find=False, distort=False)
         xy = self._fsolve_xy(xyguess, xtol=xtol)
-        #print 'using lm'
-        #xy = self._lmfind_xy(xyguess)
+        # print 'using lm'
+        # xy = self._lmfind_xy(xyguess)
         x, y = xy[0], xy[1]
 
         return x, y
@@ -635,7 +632,6 @@ class WCS:
 
         return xp, yp
 
-
     def _compare_inversion(self, x, y, xback, yback,
                            verbose=False, doplot=False, units=''):
         # Get rms differences
@@ -653,7 +649,6 @@ class WCS:
             pylab.hist(x-xback, 50, edgecolor='black', fill=False)
             pylab.hist(y-yback, 50, edgecolor='red', fill=False)
             pylab.show()
-
         return rms
 
     def InvertDistortion(self, fac=5, order_increase=1,
@@ -693,18 +688,15 @@ class WCS:
         u, v = self.ApplyCDMatrix(xdiff, ydiff)
 
         # This is what we will invert
-        #up,vp = self.Distort(u,v)
+        # up,vp = self.Distort(u,v)
         up = Apply2DPolynomial(self.distort['a'], u, v)
         vp = Apply2DPolynomial(self.distort['b'], u, v)
-
-
-
         # Find polynomial from up,vp to u,v
         ainv, binv = Invert2DPolynomial(up, vp, u, v, porder + order_increase)
         self.distort['ap'] = ainv
         self.distort['bp'] = binv
 
-        #newu, newv = self.Distort(up, vp, inverse=True)
+        # newu, newv = self.Distort(up, vp, inverse=True)
         newu = Apply2DPolynomial(ainv, up, vp)
         newv = Apply2DPolynomial(binv, up, vp)
         ufrac = (u - newu) / u
@@ -727,8 +719,6 @@ class WCS:
         rms = self._compare_inversion(x, y, xback, yback, verbose=verbose,
                                       doplot=doplot, units='pixels')
         return rms
-
-
 
     def InvertSipDistortion(self, fac=5, verbose=False, doplot=False, order_increase=1):      # pragma: no cover
         """
@@ -827,7 +817,7 @@ class WCS:
                     raise ValueError('No valid solution')
                 if latitude_p1 < 90.0 < latitude_p2:
                     latitude_p = term1 + term2
-                elif  latitude_p2 < 90.0 < latitude_p1:
+                elif latitude_p2 < 90.0 < latitude_p1:
                     latitude_p = term1 - term2
                 else:
                     # Two valid solutions
@@ -857,17 +847,14 @@ class WCS:
                         else:
                             sdp = math.sin(latitude_p)
                             cdp = math.cos(latitude_p)
-                            longitude_p = longitude_0 - \
-                                    math.atan2((stheta - sdp * sd) / (cdp * cd),
-                                               sp * ctheta / cd)
+                            longitude_p = longitude_0 - math.atan2((stheta - sdp * sd) / (cdp * cd), sp * ctheta / cd)
         return longitude_p, latitude_p
-
-
     # disableing coverage because this method is problematic
     # it wants a numpy array with fields, but then doen't care what those fields are
     # or a dict - which seems ok
     # or something else that is also a dict in structure, but not an actual dict (or subclass)
     # or yet something else that is also a dict in structure, but not an actual dict (or subclass)
+
     def ConvertWCS(self, wcs_in):     # pragma: no cover
         """
         Convert to a dictionary
@@ -912,14 +899,11 @@ class WCS:
                     if k is None:
                         continue
                     wcs[k.lower()] = v
-            except:
-                raise ValueError('Input wcs must be a numpy array '+
-                                 'with fields or a dictionary or support '+
-                                 'iteration or an items() method')
-
-
+            except ValueError:
+                raise ('Input wcs must be a numpy array '
+                       'with fields or a dictionary or support '
+                       'iteration or an items() method')
         return wcs
-
 
     def SetAngles(self, longpole, latpole, theta0):
         # These can get set if they were not in the WCS header
@@ -982,7 +966,6 @@ class WCS:
                     count += 1
         return matrix, count, order
 
-
     def ExtractDistortionModel(self):
         if self.projection not in _allowed_projections:
             raise ValueError(f"Projection must be on of {', '.join(_allowed_projections)} ")
@@ -1026,7 +1009,6 @@ class WCS:
                 self.InvertDistortion()
                 self.distort['ap_order'] = self.distort['a_order'] + 1
                 self.distort['bp_order'] = self.distort['b_order'] + 1
-
 
     def ExtractFromWCS(self):
 
@@ -1073,11 +1055,8 @@ class WCS:
 
             try:
                 self.cdinv = numpy.linalg.inv(cd)
-            except:
-                raise ValueError('Could not find inverse of CD matrix')
-
-
-
+            except ValueError:
+                raise ('Could not find inverse of CD matrix')
         # Get the poles for the inputs.  Assumes we already ran
         # SetAngles() before calling this method
         self.native_longpole, self.native_latpole = self.GetPole()
@@ -1096,12 +1075,14 @@ class WCS:
         else:
             self.naxis = numpy.array([wcs['naxis1'], wcs['naxis2']])
 
+
 def _dict_get(d, key, default=None):
     if key not in d:
         if default is not None:
             return default
         raise ValueError(f"key '{key}' must be present")
     return d[key]
+
 
 def arrscl(arr, minval, maxval, arrmin=None, arrmax=None):
     # makes a copy either way (asarray would not if it was an array already)
@@ -1122,7 +1103,7 @@ def arrscl(arr, minval, maxval, arrmin=None, arrmax=None):
     try:
         a = (maxval - minval) / (arrmax - arrmin)
         b = (arrmax*minval - arrmin*maxval) / (arrmax - arrmin)
-    except:  # pragma: no cover
+    except ValueError:  # pragma: no cover
         sys.stdout.write(f"Error calculating a,b: {sys.exc_info()[0]} {sys.exc_info()[1]}\n")
         return None
 
@@ -1131,6 +1112,7 @@ def arrscl(arr, minval, maxval, arrmin=None, arrmax=None):
     numpy.add(output, b, output)
 
     return output
+
 
 def Apply2DPolynomial(a, x, y):
     v = numpy.zeros_like(x)
@@ -1145,6 +1127,7 @@ def Apply2DPolynomial(a, x, y):
                 v += addval
 
     return v
+
 
 def make_xy_grid(n, xrang, yrang):
     # Create a grid on input ranges
@@ -1161,13 +1144,14 @@ def make_xy_grid(n, xrang, yrang):
 
     return x, y
 
+
 def make_amatrix(u, v, order, constant=True):
     # matrix for inversion.
     # coeffs_u = A^{-1} x = (a^Ta)^{-1} A^T x
     # coeffs_v = A^{-1} v
 
-    #n = (order+1)*2
-    #n = n*n
+    # n = (order+1)*2
+    # n = n*n
     n = u.size
 
     tshape = [(order + 1) * (order + 2) // 2 - 1, n]
@@ -1177,7 +1161,7 @@ def make_amatrix(u, v, order, constant=True):
         kstart = 1
     else:
         kstart = 0
-    #amatrix = numpy.zeros( tshape )
+    # amatrix = numpy.zeros( tshape )
     amatrix = numpy.ones(tshape)
 
     kk = kstart
@@ -1187,6 +1171,7 @@ def make_amatrix(u, v, order, constant=True):
             kk += 1
 
     return amatrix
+
 
 def invert_for_coeffs(amatrix, x, y, lsolve=True):
     # a^T a
@@ -1203,11 +1188,12 @@ def invert_for_coeffs(amatrix, x, y, lsolve=True):
 
     else:
         atainv = numpy.linalg.inv(ata)
-        #atainv = numpy.linalg.pinv(ata)
+        # atainv = numpy.linalg.pinv(ata)
         xcoeffs = numpy.inner(atainv, atx)
         ycoeffs = numpy.inner(atainv, aty)
 
     return xcoeffs, ycoeffs
+
 
 def pack_coeffs(xcoeffs, ycoeffs, porder, constant=True):
     """
@@ -1247,6 +1233,7 @@ def Invert2DPolynomial(u, v, x, y, porder, pack=True, constant=True):
         ainv, binv = pack_coeffs(xcoeffs, ycoeffs, porder, constant=constant)
         return ainv, binv
     return xcoeffs, ycoeffs
+
 
 def Ncoeff(order, constant=True):
     ncoeff = (order + 1) * (order + 2) // 2
@@ -1334,8 +1321,6 @@ def test_invert_2dpoly(porder, fac=5, constant=True, order_increase=0, inverse=F
         pylab.subplot(2, 1, 1)
         pylab.hist(xfrac, 50)
         pylab.hist(yfrac, 50, edgecolor='red', fill=False)
-
-
         sys.stdout.write(f'ucoeffs_in ={ucoeffs_in}\n')
         sys.stdout.write(f'ucoeffs_found ={ucoeffs}\n')
         sys.stdout.write(f'vcoeffs_in ={vcoeffs_in}\n')
@@ -1344,12 +1329,8 @@ def test_invert_2dpoly(porder, fac=5, constant=True, order_increase=0, inverse=F
     else:
         # Now test the inverse, from x,y to u,v
         sys.stdout.write('\nTesting inverse\n')
-        xcoeffs, ycoeffs = \
-                Invert2DPolynomial(x, y, u, v, porder + order_increase,
-                                   pack=False, constant=constant)
-        xcoeffsp, ycoeffsp = \
-                Invert2DPolynomial(x, y, u, v, porder + order_increase,
-                                   pack=True, constant=constant)
+        xcoeffs, ycoeffs = Invert2DPolynomial(x, y, u, v, porder + order_increase, pack=False, constant=constant)
+        xcoeffsp, ycoeffsp = Invert2DPolynomial(x, y, u, v, porder + order_increase, pack=True, constant=constant)
         newu = Apply2DPolynomial(xcoeffsp, x, y)
         newv = Apply2DPolynomial(ycoeffsp, x, y)
 
@@ -1368,7 +1349,7 @@ def test_invert_2dpoly(porder, fac=5, constant=True, order_increase=0, inverse=F
         sys.stdout.write(f'median(vfracerr){numpy.median(vfrac)}\n')
         sys.stdout.write(f'median(abs(vfracerr)){numpy.median(numpy.abs(vfrac))}\n')
         sys.stdout.write(f'sdev(vfracerr){vfrac.std()}\n\n')
-        #pylab.subplot(2,1,2)
+        # pylab.subplot(2,1,2)
         pylab.hist(ufrac, 50)
         pylab.hist(vfrac, 50, edgecolor='red', fill=False)
 
