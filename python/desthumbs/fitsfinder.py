@@ -85,19 +85,19 @@ def fix_compression(rec):
     return rec
 
 
-def query2dict_of_columns(query, dbhandle, array=False):
+def query2dict_of_columns(query, con, array=False):
     """
     Transforms the result of an SQL query and a Database handle object [dhandle]
     into a dictionary of list or numpy arrays if array=True
     """
     # Get the cursor from the DB handle
-    cur = dbhandle.cursor()
-    # Execute
-    cur.execute(query)
+    # cur = dbhandle.cursor() 
+    # # Execute
+    result = con.execute(query)
     # Get them all at once
-    list_of_tuples = cur.fetchall()
+    list_of_tuples = result.fetchall()
     # Get the description of the columns to make the dictionary
-    desc = [d[0] for d in cur.description]
+    desc = [d[0] for d in result.description]
 
     querydic = collections.OrderedDict()  # We will populate this one
     cols = list(zip(*list_of_tuples))
@@ -132,7 +132,7 @@ def query2rec(query, dbhandle):
     raise RuntimeError(msg)
 
 
-def find_tilename_radec(ra, dec, dbh, schema='prod'):
+def find_tilename_radec(ra, dec, con):
     """
     Find the DES coadd tile name that contains the given RA and DEC position.
     This function queries Oracle database to determine which coadd tile the sky coordinate (RA, DEC)
@@ -141,17 +141,17 @@ def find_tilename_radec(ra, dec, dbh, schema='prod'):
     if ra < 0:
         exit("ERROR: Please provide RA>0 and RA<360")
 
-    if schema == "prod":
-        tablename = "COADDTILE_GEOM"
-    elif schema == "des_admin":
-        tablename = "Y6A1_COADDTILE_GEOM"
-    else:
-        raise ValueError(f"ERROR: COADDTILE table not defined for schema: {schema}")
+    # if schema == "prod":
+    #     tablename = "COADDTILE_GEOM"
+    # elif schema == "des_admin":
+    #     tablename = "Y6A1_COADDTILE_GEOM"
+    # else:
+    #     raise ValueError(f"ERROR: COADDTILE table not defined for schema: {schema}")
 
-    coaddtile_geom = f"{schema}.{tablename}"
+    # coaddtile_geom = f"{schema}.{tablename}"
 
     QUERY_TILENAME_RADEC = """
-    select TILENAME from {COADDTILE_GEOM}
+    select TILENAME from Y6A2_COADDTILE_GEOM
            where (CROSSRA0='N' AND ({RA} BETWEEN RACMIN and RACMAX) AND ({DEC} BETWEEN DECCMIN and DECCMAX)) OR
                  (CROSSRA0='Y' AND ({RA180} BETWEEN RACMIN-360 and RACMAX) AND ({DEC} BETWEEN DECCMIN and DECCMAX))
     """
@@ -160,8 +160,8 @@ def find_tilename_radec(ra, dec, dbh, schema='prod'):
         ra180 = 360 - ra
     else:
         ra180 = ra
-    query = QUERY_TILENAME_RADEC.format(RA=ra, DEC=dec, RA180=ra180, COADDTILE_GEOM=coaddtile_geom)
-    tilenames_dict = query2dict_of_columns(query, dbh, array=False)
+    query = QUERY_TILENAME_RADEC.format(RA=ra, DEC=dec, RA180=ra180)
+    tilenames_dict = query2dict_of_columns(query, con, array=False)
 
     if len(tilenames_dict) < 1:
         SOUT.write(f"# WARNING: No tile found at ra:{ra}, dec:{dec}\n")
@@ -170,17 +170,17 @@ def find_tilename_radec(ra, dec, dbh, schema='prod'):
         return tilenames_dict['TILENAME'][0]
 
 
-def find_tilenames_radec(ra, dec, dbh, schema='prod'):
+def find_tilenames_radec(ra, dec, con): #schema
     """
     Find the tilename for each ra,dec and bundle them as dictionaries per tilename
     """
-
+    
     indices = {}
     tilenames = []
     tilenames_matched = []
     for k, (ra_val, dec_val) in enumerate(zip(ra, dec)):
 
-        tilename = find_tilename_radec(ra_val, dec_val, dbh, schema=schema)
+        tilename = find_tilename_radec(ra_val, dec_val, con)
         tilenames_matched.append(tilename)
 
         # Write out the results

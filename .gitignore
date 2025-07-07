@@ -3,6 +3,6 @@
 *.pyc
 *~
 
-matched_example_input_radec.csv
-base
-base/*
+/bin/spanish_dancer_radec.csv
+/base/
+
