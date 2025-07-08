@@ -5,6 +5,7 @@ import os
 import sys
 import collections
 import configparser
+import socket
 
 import oracledb
 import numpy
@@ -91,7 +92,7 @@ def query2dict_of_columns(query, con, array=False):
     into a dictionary of list or numpy arrays if array=True
     """
     # Get the cursor from the DB handle
-    # cur = dbhandle.cursor() 
+    # cur = dbhandle.cursor()
     # # Execute
     result = con.execute(query)
     # Get them all at once
@@ -170,11 +171,10 @@ def find_tilename_radec(ra, dec, con):
         return tilenames_dict['TILENAME'][0]
 
 
-def find_tilenames_radec(ra, dec, con): #schema
+def find_tilenames_radec(ra, dec, con):
     """
     Find the tilename for each ra,dec and bundle them as dictionaries per tilename
     """
-    
     indices = {}
     tilenames = []
     tilenames_matched = []
@@ -260,7 +260,7 @@ def get_coaddfiles_tilename_bytag(tilename, dbh, tag, bands='all'):
 
     QUERY_COADDFILES = """
     select FILENAME, TILENAME, BAND, FILETYPE, PATH, COMPRESSION
-     from felipe.{TAG}_COADD_FILEPATH
+     from Y6A2_COADD_FILEPATH
             where
               FILETYPE='coadd' and
               {and_BANDS} TILENAME='{TILENAME}'"""
@@ -272,22 +272,16 @@ def get_coaddfiles_tilename_bytag(tilename, dbh, tag, bands='all'):
     return rec
 
 
-def get_archive_root(dbh, schema='prod', verb=False):
+def get_archive_root(verb=False):
     """Function retreives the archive root"""
-    if schema != 'prod':
-        archive_root = "/archive_data/desarchive"
-        return archive_root
-
-    QUERY_ARCHIVE_ROOT = {}
-
-    name = {}
-    name['prod'] = 'desar2home'
-    QUERY_ARCHIVE_ROOT['prod'] = f"select root from prod.ops_archive where name={name['prod']}"
+    address = socket.getfqdn()
+    if address.find('cosmology.illinois.edu') >= 0:
+        archive_root = '/archive_data/desarchive/OPS_Taiga/'
+    elif address.find('spt3g') >= 0:
+        archive_root = '/des_archive/'
+    else:
+        archive_root = ''
+        logger.warning(f"archive_root undefined for: {address}")
     if verb:
-        SOUT.write(f"# Getting the archive root name for section: {name[schema]}\n")
-        SOUT.write(f"# Will execute the SQL query:\n********\n {QUERY_ARCHIVE_ROOT[schema]}\n********\n")
-    cur = dbh.cursor()
-    cur.execute(QUERY_ARCHIVE_ROOT[schema])
-    archive_root = cur.fetchone()[0]
-    cur.close()
+        SOUT.write(f"# Getting the archive root name for section: {archive_root}\n")
     return archive_root

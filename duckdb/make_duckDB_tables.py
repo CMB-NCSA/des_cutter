@@ -47,6 +47,8 @@ dbh = oracledb.connect(user=creds['user'],
                        password=creds['passwd'],
                        dsn=creds['dsn'])
 
+
+
 oracle2parquet_names = {
     # Notice change of name from Y6A1_COADDTILE_GEOM --> Y6A2_COADDTILE_GEOM
     'des_admin.Y6A1_COADDTILE_GEOM': 'Y6A2_COADDTILE_GEOM',

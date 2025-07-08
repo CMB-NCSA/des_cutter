@@ -6,7 +6,6 @@ import multiprocessing as mp
 import argparse
 
 import pandas
-import oracledb
 import duckdb
 
 import desthumbs
@@ -30,6 +29,8 @@ def cmdline():
                         help="Length of x-side in arcmins of image [default = 1]")
     parser.add_argument("--ysize", type=float, action="store", default=None,
                         help="Length of y-side of in arcmins image [default = 1]")
+    parser.add_argument("--dbname", action='store', default="/home/felipe/dblib/des_metadata.duckdb",
+                        help="Name of the duckdb database file")
     parser.add_argument("--tag", type=str, action="store", default='Y6A2',
                         help="Tag used for retrieving files [default=Y1A1_COADD]")
     parser.add_argument("--coaddtable", type=str, action="store", default=None,
@@ -89,60 +90,12 @@ def run(args):
 
     # Check the xsize and ysizes
     xsize, ysize = fitsfinder.check_xysize(df, args, nobj)
-
-    # Get DB handle
-    # try:
-    dbh = 'db-dessci'
-    # except ValueError:
-    #     if args.db_section == 'desoper' or args.db_section == 'db-desoper':
-    #         host = 'desdb.ncsa.illinois.edu'
-    #         port = '1521'
-    #         name = 'desoper'
-    #     elif args.db_section == 'oldsci' or args.db_section == 'db-oldsci':
-    #         host = 'desdb-dr.ncsa.illinois.edu'
-    #         port = '1521'
-    #         name = 'desdr'
-
-    config_file = os.path.join(os.environ['HOME'], 'dbconfig.ini')
-    # Get the connection credentials and information
-
-    creds = fitsfinder.load_db_config(config_file, dbh)
-    dbh = oracledb.connect(user=creds['user'],
-                           password=creds['passwd'],
-                           dsn=creds['dsn'])
+    dbh = duckdb.connect(args.dbname, read_only=True)
     schema = 'des_admin'
     print("SCHEMA IS " + schema)
     # Get archive_root
-    oracle2parquet_names = {
-        # Notice change of name from Y6A1_COADDTILE_GEOM --> Y6A2_COADDTILE_GEOM
-        'des_admin.Y6A1_COADDTILE_GEOM': 'Y6A2_COADDTILE_GEOM',
-        'felipe.Y6A2_COADD_FILEPATH': 'Y6A2_COADD_FILEPATH',
-        'felipe.Y6A2_FINALCUT_FILEPATH': 'Y6A2_FINALCUT_FILEPATH',
-    }
 
-    # Loop over all tables and create .parquet files for each one
-    for oracle_name, parquet_name in oracle2parquet_names.items():
-        t0 = time.time()
-        query = f"SELECT * FROM {oracle_name}"
-        df = pandas.read_sql(query, dbh)
-        print("Done reading table")
-        df.to_parquet(f"{parquet_name}.parquet", engine="pyarrow", compression="snappy", index=True)
-        print(f"Done: {parquet_name} in {fitsfinder.elapsed_time(t0)}[s]")
-
-    # Now we make a duckDB DB in the filesystem
-    # Connect to DuckDB persistent database (or use :memory:)
-    con = duckdb.connect("des_metadata.duckdb")
-    for oracle_name, parquet_name in oracle2parquet_names.items():
-        t0 = time.time()
-        query = f"CREATE TABLE {parquet_name} AS SELECT * FROM '{parquet_name}.parquet'"
-        con.execute(query)
-        print(f"Wrote DuckDB table: {parquet_name} in {fitsfinder.elapsed_time(t0)}[s]")
-
-    con.execute("VACUUM")  # Ensure data is written
-    # con.close()
-
-
-    archive_root = fitsfinder.get_archive_root(dbh, schema=schema, verb=True)
+    archive_root = fitsfinder.get_archive_root(verb=False)
     print(archive_root)
 
     # Make sure that outdir exists
@@ -154,7 +107,7 @@ def run(args):
     # Find all of the tilenames, indices grouped per tile
     if args.verb:
         sout.write("# Finding tilename for each input position\n")
-    tilenames, indices, tilenames_matched = fitsfinder.find_tilenames_radec(ra, dec, con) #schema=schema param
+    tilenames, indices, tilenames_matched = fitsfinder.find_tilenames_radec(ra, dec, dbh)
 
     # Add them back to pandas dataframe and write a file
     df['TILENAME'] = tilenames_matched
@@ -168,7 +121,6 @@ def run(args):
     t0 = time.time()
     Ntile = 0
     for tilename in tilenames:
-
         t1 = time.time()
         Ntile = Ntile + 1
         sout.write("# ----------------------------------------------------\n")
