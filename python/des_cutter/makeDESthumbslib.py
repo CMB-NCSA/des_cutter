@@ -4,13 +4,11 @@ import sys
 import time
 import multiprocessing as mp
 import argparse
-
 import pandas
 import duckdb
-
-import desthumbs
-from desthumbs import fitsfinder
-from desthumbs import thumbslib
+import des_cutter
+from des_cutter import fitsfinder
+from des_cutter import thumbslib
 
 XSIZE_DEFAULT = 1.0
 YSIZE_DEFAULT = 1.0
@@ -23,7 +21,6 @@ def cmdline():
     # The positional arguments
     parser.add_argument("inputList", help="Input CSV file with positions (RA,DEC)"
                         "and optional (XSIZE,YSIZE) in arcmins")
-
     # The optional arguments for image retrieval
     parser.add_argument("--xsize", type=float, action="store", default=None,
                         help="Length of x-side in arcmins of image [default = 1]")
@@ -31,11 +28,6 @@ def cmdline():
                         help="Length of y-side of in arcmins image [default = 1]")
     parser.add_argument("--dbname", action='store', default="/home/felipe/dblib/des_metadata.duckdb",
                         help="Name of the duckdb database file")
-    parser.add_argument("--tag", type=str, action="store", default='Y6A2',
-                        help="Tag used for retrieving files [default=Y1A1_COADD]")
-    parser.add_argument("--coaddtable", type=str, action="store", default=None,
-                        help="COADD table name to query if COADDS_ID are provided"
-                        "instead of RA,DEC in the input csv file")
     parser.add_argument("--bands", type=str, action='store', nargs='+', default='all',
                         help="Bands used for images. Can either be 'all' "
                         "(uses all bands, and is the default), or a list of individual bands")
@@ -49,10 +41,6 @@ def cmdline():
                         help="Turn on verbose mode [default=False]")
     parser.add_argument("--outdir", type=str, action='store', default=os.getcwd(),
                         help="Output directory location [default='./']")
-    parser.add_argument("--db_section", type=str, action='store', default='db-desoper',
-                        help="Database section to connect to")
-    parser.add_argument("--user", type=str, action='store', help="Username")
-    parser.add_argument("--password", type=str, action='store', help="password")
     parser.add_argument("--logfile", type=str, action='store', default=None,
                         help="Output logfile")
 
@@ -75,8 +63,8 @@ def cmdline():
 def run(args):
     # The write log handle
     sout = args.sout
-    desthumbs.fitsfinder.SOUT = args.sout
-    desthumbs.thumbslib.SOUT = args.sout
+    des_cutter.fitsfinder.SOUT = args.sout
+    des_cutter.thumbslib.SOUT = args.sout
 
     # Read in CSV file with pandas
     df = pandas.read_csv(args.inputList)
@@ -90,11 +78,10 @@ def run(args):
 
     # Check the xsize and ysizes
     xsize, ysize = fitsfinder.check_xysize(df, args, nobj)
+    # connect to the DuckDB database -- via filename
     dbh = duckdb.connect(args.dbname, read_only=True)
-    schema = 'des_admin'
-    print("SCHEMA IS " + schema)
-    # Get archive_root
 
+    # Get archive_root
     archive_root = fitsfinder.get_archive_root(verb=False)
     print(archive_root)
 
@@ -128,10 +115,10 @@ def run(args):
         sout.write("# ----------------------------------------------------\n")
 
         # 1. Get all of the filenames for a given tilename
-        filenames = fitsfinder.get_coaddfiles_tilename_bytag(tilename, dbh, args.tag, bands=args.bands)
+        filenames = fitsfinder.get_coaddfiles_tilename(tilename, dbh, bands=args.bands)
 
         if filenames is False:
-            sout.write(f"# Skipping: {tilename} -- not in TAG:{args.tag} \n")
+            sout.write(f"# Skipping: {tilename} -- not in TABLE \n")
             continue
         # Fix compression for SV1/Y2A1/Y3A1 releases
         else:
@@ -173,12 +160,12 @@ def run(args):
 
         # 3. Create color images using stiff for each ra,dec and loop over (ra,dec)
         for k in range(len(ra[indx])):
-            desthumbs.color_radec(ra[indx][k], dec[indx][k], avail_bands,
-                                  prefix=args.prefix,
-                                  colorset=args.colorset,
-                                  outdir=args.outdir,
-                                  verb=args.verb,
-                                  stiff_parameters={'NTHREADS': NP})
+            des_cutter.color_radec(ra[indx][k], dec[indx][k], avail_bands,
+                                   prefix=args.prefix,
+                                   colorset=args.colorset,
+                                   outdir=args.outdir,
+                                   verb=args.verb,
+                                   stiff_parameters={'NTHREADS': NP})
 
         if args.verb:
             sout.write(f"# Time {tilename}: {thumbslib.elapsed_time(t1)}\n")

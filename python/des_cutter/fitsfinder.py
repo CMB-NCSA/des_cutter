@@ -1,13 +1,9 @@
 """This module handles fits queries and finding the images within the database"""
 
 import logging
-import os
 import sys
 import collections
-import configparser
 import socket
-
-import oracledb
 import numpy
 
 SOUT = sys.stdout
@@ -16,32 +12,6 @@ XSIZE_DEFAULT = 10.0
 YSIZE_DEFAULT = 10.0
 
 logger = logging.getLogger(__name__)
-
-
-def load_db_config(config_file, profile):
-    """Function parses and formats config file"""
-    config = configparser.ConfigParser()
-    config.read(config_file)
-    section = dict(config[profile])
-    section['dsn'] = f'{section["server"]}:{section["port"]}/{section["name"]}'
-    return section
-
-
-def connect_db(user=None, password=None, dsn=None):
-    """
-    Establish OracleDB connection using environment variables or passed-in values.
-    """
-    user = user or os.getenv('DESDB_USER')
-    password = password or os.getenv('DESDB_PASS')
-    dsn = dsn or os.getenv('DESDB_DSN')  # e.g., 'db-des.ncsa.illinois.edu:1521/desoper'
-
-    logger.info("Connecting to OracleDB as user=%s, dsn=%s", user, dsn)
-    try:
-        con = oracledb.connect(user=user, password=password, dsn=dsn)
-        return con
-    except oracledb.Error as e:
-        logger.error("Failed to connect to OracleDB: %s", e)
-        raise
 
 
 def check_columns(cols, req_cols):
@@ -141,15 +111,6 @@ def find_tilename_radec(ra, dec, con):
     """
     if ra < 0:
         exit("ERROR: Please provide RA>0 and RA<360")
-
-    # if schema == "prod":
-    #     tablename = "COADDTILE_GEOM"
-    # elif schema == "des_admin":
-    #     tablename = "Y6A1_COADDTILE_GEOM"
-    # else:
-    #     raise ValueError(f"ERROR: COADDTILE table not defined for schema: {schema}")
-
-    # coaddtile_geom = f"{schema}.{tablename}"
 
     QUERY_TILENAME_RADEC = """
     select TILENAME from Y6A2_COADDTILE_GEOM
@@ -251,7 +212,7 @@ def get_query(tablename, bands=None, filetypes=None, date_start=None, date_end=N
     )
 
 
-def get_coaddfiles_tilename_bytag(tilename, dbh, tag, bands='all'):
+def get_coaddfiles_tilename(tilename, dbh, bands='all'):
     if bands == 'all':
         and_bands = ''
     else:
@@ -265,7 +226,7 @@ def get_coaddfiles_tilename_bytag(tilename, dbh, tag, bands='all'):
               FILETYPE='coadd' and
               {and_BANDS} TILENAME='{TILENAME}'"""
 
-    query = QUERY_COADDFILES.format(TILENAME=tilename, TAG=tag, and_BANDS=and_bands)
+    query = QUERY_COADDFILES.format(TILENAME=tilename, and_BANDS=and_bands)
     print(query)
     rec = query2rec(query, dbh)
     # Return a record array with the query

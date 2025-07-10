@@ -18,8 +18,8 @@ import fitsio
 from astropy.wcs import WCS
 from astropy.utils.exceptions import AstropyWarning
 
-from desthumbs import astrometry
-from desthumbs import wcsutil
+from des_cutter import astrometry
+from des_cutter import wcsutil
 
 SOUT = sys.stdout
 
@@ -376,7 +376,7 @@ def make_stiff_call(fitsfiles, tiffname, stiff_parameters={}, list=False):
     """ Make the stiff call for a set of input FITS filenames"""
 
     pars = get_stiff_parameter_set(tiffname, **stiff_parameters)
-    stiff_conf = os.path.join(os.environ['DESTHUMBS_DIR'], 'etc', 'default.stiff')
+    stiff_conf = os.path.join(os.environ['DES_CUTTER_DIR'], 'etc', 'default.stiff')
 
     cmd_list = []
     cmd_list.append("%s" % STIFF_EXE)

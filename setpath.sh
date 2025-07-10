@@ -7,8 +7,7 @@ if [ $PRODUCT_DIR = "." ]; then
 fi
 
 echo "Adding: $PRODUCT_DIR to paths"
-export SPT3G_INGEST_DIR=$PRODUCT_DIR
 export PYTHONPATH=${PRODUCT_DIR}/python:${PYTHONPATH}
 export PATH=${PRODUCT_DIR}/bin:${PATH}
-export DESTHUMBS_DIR=$PRODUCT_DIR
-echo "Added DESTHUMBS_DIR:" $DESTHUMBS_DIR
+export DES_CUTTER_DIR=$PRODUCT_DIR
+echo "Added DES_CUTTER_DIR:" $DES_CUTTER_DIR
