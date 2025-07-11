@@ -15,9 +15,9 @@ YSIZE_DEFAULT = 1.0
 
 
 def cmdline():
-    """Function parsing the CLI args"""
-    parser = argparse.ArgumentParser(description="Retrieves FITS images within DES given the file and other parameters")
-
+    """Command line parser"""
+    parser = argparse.ArgumentParser(description="Retrieves FITS fits within DES and creates thumbnails for a list \
+                                                  of sky positions")
     # The positional arguments
     parser.add_argument("inputList", help="Input CSV file with positions (RA,DEC)"
                         "and optional (XSIZE,YSIZE) in arcmins")
