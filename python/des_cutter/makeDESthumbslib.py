@@ -104,6 +104,10 @@ def run(args):
     df.to_csv(matched_list, index=False)
     sout.write(f"# Wrote matched tilenames list to: {matched_list}\n")
 
+    # Store the files used
+    files_used = os.path.join(args.outdir, 'files_used_'+os.path.basename(args.inputList))
+    f_used = open(files_used, 'w')
+
     # Loop over all of the tilenames
     t0 = time.time()
     Ntile = 0
@@ -139,6 +143,9 @@ def run(args):
             else:
                 filename = os.path.join(archive_root, filenames.PATH[k])
 
+            # Write them to a file
+            f_used.write(filename+"\n")
+
             ar = (filename, ra[indx], dec[indx])
             kw = {'xsize': xsize[indx], 'ysize': ysize[indx],
                   'units': 'arcmin', 'prefix': args.prefix, 'outdir': args.outdir,
@@ -170,5 +177,6 @@ def run(args):
         if args.verb:
             sout.write(f"# Time {tilename}: {thumbslib.elapsed_time(t1)}\n")
 
+    f_used.close()
     sout.write(f"\n*** Grand Total time:{thumbslib.elapsed_time(t0)} ***\n")
     return
