@@ -11,6 +11,6 @@ setup(name='des_cutter',
       packages=['des_cutter'],
       package_dir={'': 'python'},
       scripts=['bin/des_cutter'],
-      data_files=[('etc', glob.glob("etc/*.*")),
-                  ],
+      data_files=[("", ["setpath.sh"]),
+                  ('etc', glob.glob("etc/*.*"))]
       )
