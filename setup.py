@@ -3,7 +3,7 @@ import glob
 
 # The main call
 setup(name='des_cutter',
-      version='0.1.0',
+      version='1.0.0',
       license="GPL",
       description="A python module to make FITS files cutouts/thumbnails for DES",
       author="Felipe Menanteau",
