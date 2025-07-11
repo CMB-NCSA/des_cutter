@@ -1,4 +1,4 @@
-#des_cutter
+# des_cutter
 
 A python module to make FITS files cutouts/thumbnails
 
