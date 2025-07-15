@@ -82,8 +82,7 @@ def run(args):
     dbh = duckdb.connect(args.dbname, read_only=True)
 
     # Get archive_root
-    archive_root = fitsfinder.get_archive_root(verb=False)
-    print(archive_root)
+    archive_root = fitsfinder.get_archive_root(verb=True)
 
     # Make sure that outdir exists
     if not os.path.exists(args.outdir):

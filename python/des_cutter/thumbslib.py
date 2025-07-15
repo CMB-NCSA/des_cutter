@@ -44,6 +44,11 @@ warnings.filterwarnings('ignore', category=AstropyWarning, append=True)
 # Logger
 LOGGER = logging.getLogger(__name__)
 
+try:
+    DES_CUTTER_DIR = os.environ['DES_CUTTER_DIR']
+except KeyError:
+    DES_CUTTER_DIR = __file__.split('python')[0]
+
 
 def elapsed_time(t1, verb=False):
     """
@@ -376,7 +381,7 @@ def make_stiff_call(fitsfiles, tiffname, stiff_parameters={}, list=False):
     """ Make the stiff call for a set of input FITS filenames"""
 
     pars = get_stiff_parameter_set(tiffname, **stiff_parameters)
-    stiff_conf = os.path.join(os.environ['DES_CUTTER_DIR'], 'etc', 'default.stiff')
+    stiff_conf = os.path.join(DES_CUTTER_DIR, 'etc', 'default.stiff')
 
     cmd_list = []
     cmd_list.append("%s" % STIFF_EXE)

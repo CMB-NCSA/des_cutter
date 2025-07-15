@@ -5,6 +5,7 @@ import sys
 import collections
 import socket
 import numpy
+import os
 
 SOUT = sys.stdout
 
@@ -235,14 +236,20 @@ def get_coaddfiles_tilename(tilename, dbh, bands='all'):
 
 def get_archive_root(verb=False):
     """Function retreives the archive root"""
-    address = socket.getfqdn()
-    if address.find('cosmology.illinois.edu') >= 0:
-        archive_root = '/archive_data/desarchive/OPS_Taiga/'
-    elif address.find('spt3g') >= 0:
-        archive_root = '/des_archive/'
+
+    if 'DES_ARCHIVE_ROOT' in os.environ:
+        archive_root = os.environ['DES_ARCHIVE_ROOT']
     else:
-        archive_root = ''
-        logger.warning(f"archive_root undefined for: {address}")
+        # Try to auto-figure out from location
+        address = socket.getfqdn()
+        if address.find('cosmology.illinois.edu') >= 0:
+            archive_root = '/archive_data/desarchive/OPS_Taiga/'
+        elif address.find('spt3g') >= 0:
+            archive_root = '/des_archive/'
+        else:
+            logger.warning(f"archive_root undefined for: {address}")
+            archive_root = ''
+
     if verb:
-        SOUT.write(f"# Getting the archive root name for section: {archive_root}\n")
+        SOUT.write(f"# Getting the archive root: {archive_root}\n")
     return archive_root
