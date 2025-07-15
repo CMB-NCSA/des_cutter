@@ -441,7 +441,7 @@ def color_radec(ra, dec, avail_bands,
     # HERE WE COULD LOOP OVER RA,DEC if they are lists!
 
     # Set the output tiff name
-    tiffname = get_thumbColorName(ra, dec, prefix=prefix, ext='tif', outdir=outdir)
+    tiffname = get_thumbColorName(ra, dec, prefix=prefix, ext='tiff', outdir=outdir)
 
     # Set the names of the input files
     fitsfiles = []
