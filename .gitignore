@@ -2,7 +2,7 @@
 .DS_Store
 *.pyc
 *~
+*.parquet
 
 /bin/spanish_dancer_radec.csv
 /base/
-
