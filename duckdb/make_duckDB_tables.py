@@ -6,6 +6,8 @@ import os
 import pandas as pd
 import duckdb
 import time
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, message=".*pandas only supports SQLAlchemy.*")
 
 
 def elapsed_time(t1, verb=False):
@@ -63,6 +65,9 @@ for oracle_name, parquet_name in oracle2parquet_names.items():
     query = f"SELECT * FROM {oracle_name}"
     df = pd.read_sql(query, dbh)
     print("Done reading table")
+    if 'PATH' in df.columns:
+        df['PATH'] = df['PATH'].str.replace('OPS_Taiga/', '', regex=False)
+
     df.to_parquet(f"{parquet_name}.parquet", engine="pyarrow", compression="snappy", index=True)
     print(f"Done: {parquet_name} in {elapsed_time(t0)}[s]")
 

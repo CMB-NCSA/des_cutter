@@ -87,11 +87,6 @@ create table Y6A2_COADD_FILEPATH as
 
 
 
-
-
-
-
-
 -- example of search near ra, dec
 select i.FILENAME, i.BAND, i.FILETYPE, i.EXPTIME, i.NITE, i.EXPNUM, e.DATE_OBS, e.MJD_OBS from Y6A2_IMAGE i, Y6A2_EXPOSURE e
   where ((i.CROSSRA0='N' AND (0.29782658 BETWEEN i.RACMIN and i.RACMAX) AND (0.029086056 BETWEEN i.DECCMIN and i.DECCMAX)) OR

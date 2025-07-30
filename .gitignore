@@ -3,6 +3,7 @@
 *.pyc
 *~
 *.parquet
+*.duckdb
 
 /bin/spanish_dancer_radec.csv
 /base/
