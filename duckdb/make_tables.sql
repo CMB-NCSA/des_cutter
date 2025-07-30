@@ -1,14 +1,19 @@
---- Creation in dessci for Y6A2_FINALCUT_FILEPATH
-
+--- Creation of table on dessci for Y6A2_FINALCUT_FILEPATH
 --- build table with info for finalcut files
+-- DROP TABLE felipe.Y6A2_FINALCUT_FILEPATH;
 create table Y6A2_FINALCUT_FILEPATH as
-select i.FILENAME, f.PATH, i.BAND, i.EXPTIME, i.AIRMASS, i.FWHM, i.NITE, i.EXPNUM, i.CCDNUM, e.DATE_OBS, e.MJD_OBS,
+select i.FILENAME, f.PATH, f.COMPRESSION, i.BAND, i.EXPTIME, i.AIRMASS, i.FWHM, i.NITE, i.EXPNUM, i.CCDNUM,
+       e.DATE_OBS, e.MJD_OBS,
        i.CROSSRA0, i.RACMIN, i.RACMAX, i.DECCMIN, i.DECCMAX,
-       i.RAC1, i.RAC2, i.RAC3, i.RAC4, i.DECC1, i.DECC2, i.DECC3, i.DECC4
+       i.RA_CENT, i.DEC_CENT,
+       i.RAC1, i.RAC2, i.RAC3, i.RAC4, i.DECC1, i.DECC2, i.DECC3, i.DECC4,
+       (case when i.CROSSRA0='Y' THEN abs(i.RACMAX - (i.RACMIN-360)) ELSE abs(i.RACMAX - i.RACMIN) END) as RA_SIZE,
+       abs(i.DECCMAX - i.DECCMIN) as DEC_SIZE
  from Y6A2_IMAGE i, Y6A2_EXPOSURE e, Y6A2_FILE_ARCHIVE_INFO f
  where  i.EXPNUM=e.EXPNUM
         and i.FILENAME=f.FILENAME
         and i.FILETYPE='red_immask';
+
 ---
 -- SELECT COUNT(*) FROM Y6A2_FINALCUT_FILEPATH;
 --   COUNT(*)
@@ -28,9 +33,10 @@ create table Y6A2_COADD_FILEPATH as
 ----------
 -- 50845
 
+
+
 ---- ################# -----------
-
-
+--- Experimental stuff ----
 
 -- We are NOT using this one --
 -- Get FILESIZE and MD5SUM and CREATED_DATE using desoper as DESFILE does not exists on dessci
