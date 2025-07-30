@@ -21,12 +21,18 @@ select i.FILENAME, f.PATH, f.COMPRESSION, i.BAND, i.EXPTIME, i.AIRMASS, i.FWHM, 
 --   7954954
 
 -- To create a new table on dessci for Y6A2 called felipe.Y6A2_COADD_FILEPATH:
+-- Now with corners information
 -- DROP TABLE felipe.Y6A2_COADD_FILEPATH
+
 create table Y6A2_COADD_FILEPATH as
- select c.FILENAME, c.TILENAME, c.BAND, c.FILETYPE, f.PATH, f.COMPRESSION
-  from des_admin.Y6A2_COADD c, des_admin.Y6A2_FILE_ARCHIVE_INFO f
-   where f.FILENAME=c.FILENAME
-       and c.FILETYPE='coadd';
+select c.FILENAME, c.TILENAME, c.BAND, c.FILETYPE, f.PATH, f.COMPRESSION,
+       t.CROSSRA0, t.RACMIN, t.RACMAX, t.DECCMIN, t.DECCMAX,
+       t.RA_CENT, t.DEC_CENT, t.RA_SIZE, t.DEC_SIZE,
+       t.RAC1, t.RAC2, t.RAC3, t.RAC4, t.DECC1, t.DECC2, t.DECC3, t.DECC4
+ from des_admin.Y6A2_COADD c, des_admin.Y6A2_FILE_ARCHIVE_INFO f, des_admin.Y6A1_COADDTILE_GEOM t
+  where f.FILENAME=c.FILENAME
+      and c.TILENAME = t.TILENAME
+      and c.FILETYPE='coadd';
 
 -- SELECT COUNT(*) FROM Y6A2_COADD_FILEPATH;
 -- COUNT(*)
