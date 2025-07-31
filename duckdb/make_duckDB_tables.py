@@ -58,6 +58,7 @@ oracle2parquet_names = {
     'felipe.Y6A2_COADD_FILEPATH': 'Y6A2_COADD_FILEPATH',
     'felipe.Y6A2_COADD_CATALOG_FILEPATH': 'Y6A2_COADD_CATALOG_FILEPATH',
     'felipe.Y6A2_FINALCUT_FILEPATH': 'Y6A2_FINALCUT_FILEPATH',
+    'felipe.Y6A2_FINALCUT_CATALOG_FILEPATH': 'Y6A2_FINALCUT_CATALOG_FILEPATH',
 }
 
 # Loop over all tables and create .parquet files for each one
