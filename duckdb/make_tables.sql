@@ -39,6 +39,14 @@ select c.FILENAME, c.TILENAME, c.BAND, c.FILETYPE, f.PATH, f.COMPRESSION,
 ----------
 -- 50845
 
+create table Y6A2_COADD_CATALOG_FILEPATH as
+select c.FILENAME, c.TILENAME, c.BAND, c.FILETYPE, f.PATH
+ from des_admin.Y6A2_CATALOG c,  des_admin.Y6A2_FILE_ARCHIVE_INFO f
+  where c.FILENAME = f.FILENAME
+    and c.FILETYPE='coadd_cat';
+
+-- SELECT COUNT(*) FROM Y6A2_COADD_CATALOG_FILEPATH;
+-- 50845
 
 
 ---- ################# -----------
