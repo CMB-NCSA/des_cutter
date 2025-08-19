@@ -55,7 +55,7 @@ dbh = oracledb.connect(user=creds['user'],
 # Create the DR3_COADD_FILEPATH parquet table directly from a query
 query = {}
 query['DR3_COADDTILE_GEOM'] = "SELECT * FROM COADDTILE_GEOM"
-query['DR3_COADD_FILEPATH'] = """
+query['DR3_COADD_IMAGE_FILEPATH'] = """
 select c.FILENAME, c.TILENAME, c.BAND, f.PATH, f.COMPRESSION,
        t.CROSSRA0, t.RACMIN, t.RACMAX, t.DECCMIN, t.DECCMAX,
        t.RA_CENT, t.DEC_CENT, t.RA_SIZE, t.DEC_SIZE,
@@ -67,15 +67,50 @@ select c.FILENAME, c.TILENAME, c.BAND, f.PATH, f.COMPRESSION,
     and p.PFW_ATTEMPT_ID = c.PFW_ATTEMPT_ID
     and f.FILENAME = c.FILENAME"""
 
-for parquet_name, q in query.items():
-    print(f"Will run query: {q}")
+query["DR3_COADD_CATALOG_FILEPATH"] = """
+select c.FILENAME, c.TILENAME, c.BAND, c.FILETYPE, f.PATH
+  from CATALOG c, PROCTAG p, FILE_ARCHIVE_INFO f
+   where p.TAG = 'DR3_COADD'
+     and c.FILENAME = f.FILENAME
+     and c.FILETYPE='coadd_cat'
+     and p.PFW_ATTEMPT_ID = c.PFW_ATTEMPT_ID"""
+
+query["DR3_FINALCUT_IMAGE_FILEPATH"] = """
+select i.FILENAME, f.PATH, f.COMPRESSION, i.BAND, i.EXPTIME, i.AIRMASS,
+       i.FWHM, i.NITE, i.EXPNUM, i.CCDNUM, i.PFW_ATTEMPT_ID,
+       e.DATE_OBS, e.MJD_OBS,
+       i.CROSSRA0, i.RACMIN, i.RACMAX, i.DECCMIN, i.DECCMAX,
+       i.RA_CENT, i.DEC_CENT,
+       i.RAC1, i.RAC2, i.RAC3, i.RAC4, i.DECC1, i.DECC2, i.DECC3, i.DECC4,
+       (case when i.CROSSRA0='Y' THEN abs(i.RACMAX - (i.RACMIN-360)) ELSE abs(i.RACMAX - i.RACMIN) END) as RA_SIZE,
+       abs(i.DECCMAX - i.DECCMIN) as DEC_SIZE
+ from IMAGE i, EXPOSURE e, FILE_ARCHIVE_INFO f, PROCTAG p
+  where p.TAG = 'DR3_FINALCUT'
+   and p.pfw_attempt_id = i.pfw_attempt_id
+   and i.EXPNUM=e.EXPNUM
+   and i.FILENAME=f.FILENAME
+   and i.FILETYPE='red_immask'"""
+
+query["DR3_FINALCUT_CATALOG_FILEPATH"] = """
+select c.FILENAME, f.PATH, c.FILETYPE, c.BAND, c.CCDNUM, c.PFW_ATTEMPT_ID
+ from CATALOG c, FILE_ARCHIVE_INFO f, PROCTAG p
+  where p.TAG = 'DR3_FINALCUT'
+    and f.FILENAME=c.FILENAME
+    and c.FILETYPE='cat_finalcut'"""
+
+# We want to do only some tables at a time
+tables = ["DR3_FINALCUT_IMAGE_FILEPATH", "DR3_FINALCUT_CATALOG_FILEPATH"]
+
+for parquet_name in tables:
+    q = query[parquet_name]
+    print(f"-- Will run query: {q}\n")
     t0 = time.time()
     df = pd.read_sql(q, dbh)
-    print(f"Done with query in {elapsed_time(t0)}[s]")
+    print(f"-- Done with query in {elapsed_time(t0)}[s]")
     df.to_parquet(f"{parquet_name}.parquet", engine="pyarrow", compression="snappy", index=True)
 
 con = duckdb.connect("decade_metadata.duckdb")
-for parquet_name, q in query.items():
+for parquet_name in tables:
     t0 = time.time()
     query = f"CREATE TABLE {parquet_name} AS SELECT * FROM '{parquet_name}.parquet'"
     con.execute(query)
