@@ -32,8 +32,8 @@ select c.FILENAME, f.PATH, c.FILETYPE, c.BAND, c.CCDNUM, c.PFW_ATTEMPT_ID
 ---- *** COADD TABLES *** ---
 -- To create a new table on dessci for Y6A2 called felipe.Y6A2_COADD_FILEPATH:
 -- Now with corners information
--- DROP TABLE felipe.Y6A2_COADD_FILEPATH
-create table Y6A2_COADD_FILEPATH as
+-- DROP TABLE felipe.Y6A2_COADD_IMAGE_FILEPATH
+create table Y6A2_COADD_IMAGE_FILEPATH as
 select c.FILENAME, c.TILENAME, c.BAND, c.FILETYPE, f.PATH, f.COMPRESSION,
        t.CROSSRA0, t.RACMIN, t.RACMAX, t.DECCMIN, t.DECCMAX,
        t.RA_CENT, t.DEC_CENT, t.RA_SIZE, t.DEC_SIZE,
@@ -49,8 +49,8 @@ select c.FILENAME, c.TILENAME, c.BAND, c.FILETYPE, f.PATH, f.COMPRESSION,
 -- 50845
 
 create table Y6A2_COADD_CATALOG_FILEPATH as
-select c.FILENAME, c.TILENAME, c.BAND, c.FILETYPE, f.PATH, d.FILESIZE --, d.MD5SUM, d.COMPRESSION
- from des_admin.Y6A2_CATALOG c, des_admin.Y6A2_FILE_ARCHIVE_INFO f -- , des_admin.Y6A2_DESFILE_COLUMNS d
+select c.FILENAME, c.TILENAME, c.BAND, c.FILETYPE, f.PATH
+ from des_admin.Y6A2_CATALOG c, des_admin.Y6A2_FILE_ARCHIVE_INFO f
   where c.FILENAME = f.FILENAME
     and d.FILENAME = c.FILENAME
     and c.FILETYPE='coadd_cat';
@@ -58,7 +58,14 @@ select c.FILENAME, c.TILENAME, c.BAND, c.FILETYPE, f.PATH, d.FILESIZE --, d.MD5S
 -- SELECT COUNT(*) FROM Y6A2_COADD_CATALOG_FILEPATH;
 -- 50845
 
+-- Tables for TIFF files
+create table Y6A2_COADD_TIFF_FILEPATH as
+select m.FILENAME, f.PATH, m.TILENAME
+  from Y6A2_MISCFILE m, des_admin.Y6A2_FILE_ARCHIVE_INFO f
+  where m.FILETYPE='coadd_tiff'
+  and m.FILENAME = f.FILENAME;
 
+-- SELECT COUNT(*) FROM Y6A2_COADD_TIFF_FILEPATH;
 
 --------------------------------------------------
 -- example of search near ra, dec
