@@ -33,6 +33,8 @@ def cmdline():
                         "(uses all bands, and is the default), or a list of individual bands")
     parser.add_argument("--prefix", type=str, action='store', default='DES',
                         help="Prefix for thumbnail filenames [default='DES']")
+    parser.add_argument("--tag", type=str, action='store', default='Y6A2',
+                        help="Table TAG to use [default='Y6A2'")
     parser.add_argument("--colorset", type=str, action='store', nargs='+', default=['i', 'r', 'g'],
                         help="Color Set to use for creation of color image [default=i r g]")
     parser.add_argument("--MP", action='store_true', default=False,
@@ -93,7 +95,7 @@ def run(args):
     # Find all of the tilenames, indices grouped per tile
     if args.verb:
         sout.write("# Finding tilename for each input position\n")
-    tilenames, indices, tilenames_matched = fitsfinder.find_tilenames_radec(ra, dec, dbh)
+    tilenames, indices, tilenames_matched = fitsfinder.find_tilenames_radec(ra, dec, dbh, tag=args.tag)
 
     # Add them back to pandas dataframe and write a file
     df['TILENAME'] = tilenames_matched

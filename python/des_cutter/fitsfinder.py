@@ -104,7 +104,7 @@ def query2rec(query, dbhandle):
     raise RuntimeError(msg)
 
 
-def find_tilename_radec(ra, dec, con):
+def find_tilename_radec(ra, dec, con, tag='Y6A2'):
     """
     Find the DES coadd tile name that contains the given RA and DEC position.
     This function queries Oracle database to determine which coadd tile the sky coordinate (RA, DEC)
@@ -114,7 +114,7 @@ def find_tilename_radec(ra, dec, con):
         exit("ERROR: Please provide RA>0 and RA<360")
 
     QUERY_TILENAME_RADEC = """
-    select TILENAME from Y6A2_COADDTILE_GEOM
+    select TILENAME from {TAG}_COADDTILE_GEOM
            where (CROSSRA0='N' AND ({RA} BETWEEN RACMIN and RACMAX) AND ({DEC} BETWEEN DECCMIN and DECCMAX)) OR
                  (CROSSRA0='Y' AND ({RA180} BETWEEN RACMIN-360 and RACMAX) AND ({DEC} BETWEEN DECCMIN and DECCMAX))
     """
@@ -123,7 +123,7 @@ def find_tilename_radec(ra, dec, con):
         ra180 = 360 - ra
     else:
         ra180 = ra
-    query = QUERY_TILENAME_RADEC.format(RA=ra, DEC=dec, RA180=ra180)
+    query = QUERY_TILENAME_RADEC.format(RA=ra, DEC=dec, RA180=ra180, TAG=tag)
     tilenames_dict = query2dict_of_columns(query, con, array=False)
 
     if len(tilenames_dict) < 1:
@@ -133,7 +133,7 @@ def find_tilename_radec(ra, dec, con):
         return tilenames_dict['TILENAME'][0]
 
 
-def find_tilenames_radec(ra, dec, con):
+def find_tilenames_radec(ra, dec, con, tag='Y6A2'):
     """
     Find the tilename for each ra,dec and bundle them as dictionaries per tilename
     """
@@ -142,7 +142,7 @@ def find_tilenames_radec(ra, dec, con):
     tilenames_matched = []
     for k, (ra_val, dec_val) in enumerate(zip(ra, dec)):
 
-        tilename = find_tilename_radec(ra_val, dec_val, con)
+        tilename = find_tilename_radec(ra_val, dec_val, con, tag=tag)
         tilenames_matched.append(tilename)
 
         # Write out the results
