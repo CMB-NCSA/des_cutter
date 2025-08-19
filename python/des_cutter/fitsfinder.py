@@ -6,6 +6,9 @@ import collections
 import socket
 import numpy
 import os
+import pandas
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, message=".*pandas only supports SQLAlchemy.*")
 
 SOUT = sys.stdout
 
@@ -160,57 +163,50 @@ def find_tilenames_radec(ra, dec, con, tag='Y6A2'):
     return tilenames, indices, tilenames_matched
 
 
-def get_query(tablename, bands=None, filetypes=None, date_start=None, date_end=None, yearly=None):
-    """Builds the SQL query string for retrieving the metadata from OracleDB"""
-    query_files_template = """
-    SELECT ID, FILEPATH || '/' || FILENAME AS FILE, BAND, DATE_BEG FROM {tablename}
-      {where}
-       {and_bands}
-       {and_dates}
-       {and_filetypes}
+def find_finalcut_images(ra, dec, dbh, bands=None, date_start=None, date_end=None):
+    for k, (ra_val, dec_val) in enumerate(zip(ra, dec)):
+        query = get_query_finalcut(ra_val, dec_val, bands=bands, date_start=date_start, date_end=date_end)
+        df = pandas.read_sql(query, con=dbh)
+        print(query)
+        print(df)
+        # find_finalcut_image(ra_val, dec_val, dbh, bands=bands, date_start=date_start, date_end=date_end)
+
+
+def get_query_finalcut(ra, dec, bands=None, date_start=None, date_end=None):
+
+    query_FINALCUTFILES = """
+    select FILENAME, COMPRESSION, PATH, BAND, EXPTIME, NITE, EXPNUM, DATE_OBS, MJD_OBS
+    from Y6A2_FINALCUT_FILEPATH
+      where
+      ((CROSSRA0='N' AND ({RA} BETWEEN RACMIN and RACMAX) AND ({DEC} BETWEEN DECCMIN and DECCMAX)) OR
+       (CROSSRA0='Y' AND ({RA} BETWEEN RACMIN-360 and RACMAX) AND ({DEC} BETWEEN DECCMIN and DECCMAX)))
+      {and_bands}
+      {and_dates}
+      order by EXPNUM
     """
 
     # BAND formatting
-    if bands:
-        in_bands = ','.join(f"'{s}'" for s in bands)
-        and_bands = f"BAND IN ({in_bands})"
-    else:
+    if bands == 'all' or bands is None:
         and_bands = ''
-
-    # FILETYPE formatting
-    if filetypes:
-        in_filetypes = ','.join(f"'{s}'" for s in filetypes)
-        and_filetypes = f"FILETYPE IN ({in_filetypes})"
-        if bands:
-            and_filetypes = f"AND ({and_filetypes})"
     else:
-        and_filetypes = ''
+        in_bands = ','.join(f"'{s}'" for s in bands)
+        and_bands = f"and BAND IN ({in_bands})"
 
     # DATE formatting
     if isinstance(date_start, str) and isinstance(date_end, str):
-        and_dates = f"DATE_BEG BETWEEN TO_DATE('{date_start}', 'YYYY-MM-DD') AND TO_DATE('{date_end}', 'YYYY-MM-DD')"
-        and_dates_or = ' OR '
+        # and_dates = f"DATE_OBS BETWEEN TO_DATE('{date_start}', 'YYYY-MM-DD') AND TO_DATE('{date_end}', 'YYYY-MM-DD')"
+        and_dates = f"and DATE_OBS BETWEEN '{date_start}' AND '{date_end}'"
     else:
         and_dates = ''
-        and_dates_or = ''
 
-    # OBS_ID formatting
-    if yearly:
-        in_yearly = ','.join(f"'{s}'" for s in yearly)
-        and_dates = f"{and_dates}{and_dates_or}OBS_ID IN ({in_yearly})"
-    if bands or filetypes:
-        and_dates = f"AND ({and_dates})" if and_dates else ''
-
-    # Final WHERE clause
-    where = 'WHERE' if and_bands or and_filetypes or and_dates else ''
-
-    return query_files_template.format(
-        tablename=tablename,
-        where=where,
+    query = query_FINALCUTFILES.format(
+        RA=ra,
+        DEC=dec,
         and_bands=and_bands,
-        and_filetypes=and_filetypes,
         and_dates=and_dates
     )
+
+    return query
 
 
 def get_coaddfiles_tilename(tilename, dbh, bands='all'):

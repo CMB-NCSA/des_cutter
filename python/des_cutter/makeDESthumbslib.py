@@ -35,6 +35,10 @@ def cmdline():
                         help="Prefix for thumbnail filenames [default='DES']")
     parser.add_argument("--tag", type=str, action='store', default='Y6A2',
                         help="Table TAG to use [default='Y6A2'")
+    parser.add_argument("--date_start", type=str, action='store', default=None,
+                        help="The START date to search for files formatted [YYYY-MM-DD]")
+    parser.add_argument("--date_end", type=str, action='store', default=None,
+                        help="The END date to search for files formatted [YYYY-MM-DD]")
     parser.add_argument("--colorset", type=str, action='store', nargs='+', default=['i', 'r', 'g'],
                         help="Color Set to use for creation of color image [default=i r g]")
     parser.add_argument("--MP", action='store_true', default=False,
@@ -48,6 +52,14 @@ def cmdline():
 
     args = parser.parse_args()
 
+    # Make sure that both date_start/end are defined or both are None
+    if args.date_start is None and args.date_end is None:
+        pass
+    elif isinstance(args.date_start, str) and isinstance(args.date_end, str):
+        pass
+    else:
+        raise ValueError('Both --date_start and --date_end must be defined')
+
     if args.logfile:
         sout = open(args.logfile, 'w', encoding="utf-8")
     else:
@@ -60,6 +72,46 @@ def cmdline():
             continue
         sout.write(f"# \t--{key:<10}\t{value}\n")
     return args
+
+
+def run_finalcut(args):
+    # The write log handle
+    sout = args.sout
+    des_cutter.fitsfinder.SOUT = args.sout
+    des_cutter.thumbslib.SOUT = args.sout
+
+    # Read in CSV file with pandas
+    df = pandas.read_csv(args.inputList)
+    ra = df.RA.values  # if you only want the values otherwise use df.RA
+    dec = df.DEC.values
+    nobj = len(ra)
+    req_cols = ['RA', 'DEC']
+
+    # Check columns for consistency
+    fitsfinder.check_columns(df.columns, req_cols)
+
+    # Check the xsize and ysizes
+    xsize, ysize = fitsfinder.check_xysize(df, args, nobj)
+    # connect to the DuckDB database -- via filename
+    dbh = duckdb.connect(args.dbname, read_only=True)
+
+    # Get archive_root
+    archive_root = fitsfinder.get_archive_root(verb=True)
+
+    # Make sure that outdir exists
+    if not os.path.exists(args.outdir):
+        if args.verb:
+            sout.write(f"# Creating: {args.outdir}\n" % args.outdir)
+        os.makedirs(args.outdir)
+
+    # Find all of the tilenames, indices grouped per tile
+    if args.verb:
+        sout.write("# Finding tilename for each input position\n")
+
+    fitsfinder.find_finalcut_images(ra, dec, dbh,
+                                    date_start=args.date_start,
+                                    date_end=args.date_end,
+                                    bands=args.bands)
 
 
 def run(args):
