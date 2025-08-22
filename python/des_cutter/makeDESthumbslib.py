@@ -41,8 +41,11 @@ def cmdline():
                         help="The END date to search for files formatted [YYYY-MM-DD]")
     parser.add_argument("--colorset", type=str, action='store', nargs='+', default=['i', 'r', 'g'],
                         help="Color Set to use for creation of color image [default=i r g]")
+    # Use multiprocessing
     parser.add_argument("--MP", action='store_true', default=False,
                         help="Run in multiple core [default=False]")
+    parser.add_argument("--np", action="store", default=1, type=int,
+                        help="Run using multi-process, 0=automatic, 1=single-process [default]")
     parser.add_argument("--verb", action='store_true', default=False,
                         help="Turn on verbose mode [default=False]")
     parser.add_argument("--outdir", type=str, action='store', default=os.getcwd(),
@@ -80,6 +83,24 @@ def run_finalcut(args):
     des_cutter.fitsfinder.SOUT = args.sout
     des_cutter.thumbslib.SOUT = args.sout
 
+    # Get the number of processors to use
+    NP = thumbslib.get_NP(args.np)
+    if NP > 1:
+        MP = True
+    else:
+        MP = False
+
+    if NP > 1:
+        p = mp.Pool(processes=NP)
+        print(f"Will use {NP} processors for process")
+        manager = mp.Manager()
+        cutout_dict = manager.dict()
+        rejected_dict = manager.dict()
+        results = []
+    else:
+        cutout_dict = None
+        rejected_dict = None
+
     # Read in CSV file with pandas
     df = pandas.read_csv(args.inputList)
     ra = df.RA.values  # if you only want the values otherwise use df.RA
@@ -101,17 +122,51 @@ def run_finalcut(args):
     # Make sure that outdir exists
     if not os.path.exists(args.outdir):
         if args.verb:
-            sout.write(f"# Creating: {args.outdir}\n" % args.outdir)
+            sout.write(f"# Creating: {args.outdir}")
         os.makedirs(args.outdir)
 
     # Find all of the tilenames, indices grouped per tile
     if args.verb:
-        sout.write("# Finding tilename for each input position\n")
+        sout.write("# Finding FINALCUT images for each input (ra, dec) position\n")
+    # Get the list of finalcut filenames
+    df_images = fitsfinder.find_finalcut_images(ra, dec, dbh,
+                                                date_start=args.date_start,
+                                                date_end=args.date_end,
+                                                bands=args.bands)
+    # Loop over all ra, dec postions and results.
+    for i, (ra_val, dec_val) in enumerate(zip(ra, dec)):
+        df = df_images[i]
+        Nfiles = len(df)
+        print(i, ra_val, dec_val, Nfiles)
+        # Loop over the files for each position
+        for k in range(Nfiles):
+            filename = os.path.join(archive_root, df.FILE[k])
+            # scamp_head = os.path.join(archive_root, df.SCAMP_HEAD[k])
+            # counter = f"{k}/{Nfiles} files"
+            ar = (filename, ra_val, dec_val)
+            kw = {'xsize': xsize[i], 'ysize': ysize[i],
+                  'units': 'arcmin', 'prefix': args.prefix,
+                  'outdir': args.outdir, # 'counter': counter,
+                  'verb': args.verb}
 
-    fitsfinder.find_finalcut_images(ra, dec, dbh,
-                                    date_start=args.date_start,
-                                    date_end=args.date_end,
-                                    bands=args.bands)
+            if NP > 1:
+                # Get result to catch exceptions later, after close()
+                s = p.apply_async(thumbslib.fitscutter, args=ar, kwds=kw)
+                results.append(s)
+            else:
+
+                thumbslib.fitscutter(*ar, **kw)
+            #print(i, k, filename)
+
+    # Close/join mp processes
+    if NP > 1:
+        p.close()
+        # Check for exceptions
+        for r in results:
+            r.get()
+        p.join()
+        p.terminate()
+        del p
 
 
 def run(args):
@@ -141,7 +196,7 @@ def run(args):
     # Make sure that outdir exists
     if not os.path.exists(args.outdir):
         if args.verb:
-            sout.write(f"# Creating: {args.outdir}\n" % args.outdir)
+            sout.write(f"# Creating: {args.outdir}")
         os.makedirs(args.outdir)
 
     # Find all of the tilenames, indices grouped per tile
@@ -177,9 +232,6 @@ def run(args):
         if filenames is False:
             sout.write(f"# Skipping: {tilename} -- not in TABLE \n")
             continue
-        # Fix compression for SV1/Y2A1/Y3A1 releases
-        else:
-            filenames = fitsfinder.fix_compression(filenames)
 
         indx = indices[tilename]
 

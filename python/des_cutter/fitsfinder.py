@@ -1,6 +1,4 @@
-"""This module handles fits queries and finding the images within the database"""
 
-import logging
 import sys
 import collections
 import socket
@@ -8,7 +6,10 @@ import numpy
 import os
 import pandas
 import warnings
+import logging
+
 warnings.filterwarnings("ignore", category=UserWarning, message=".*pandas only supports SQLAlchemy.*")
+
 
 SOUT = sys.stdout
 
@@ -46,18 +47,6 @@ def check_xysize(df, args, nobj):
         except ValueError:
             ysize = numpy.array([YSIZE_DEFAULT]*nobj)
     return xsize, ysize
-
-
-def fix_compression(rec):
-    """
-    Here we fix 'COMPRESSION from None --> '' if present
-    """
-    if rec is False:
-        pass
-    elif 'COMPRESSION' in rec.dtype.names:
-        compression = ['' if c is None else c for c in rec['COMPRESSION']]
-        rec['COMPRESSION'] = numpy.array(compression)
-    return rec
 
 
 def query2dict_of_columns(query, con, array=False):
@@ -164,12 +153,21 @@ def find_tilenames_radec(ra, dec, con, tag='Y6A2'):
 
 
 def find_finalcut_images(ra, dec, dbh, bands=None, date_start=None, date_end=None):
+    """
+    Find the FINALCUT images via sql query
+    """
+    results = []
     for k, (ra_val, dec_val) in enumerate(zip(ra, dec)):
+        # Get the formatted query for ra, dec, dates and bands
         query = get_query_finalcut(ra_val, dec_val, bands=bands, date_start=date_start, date_end=date_end)
+        # Load into a pandas df
         df = pandas.read_sql(query, con=dbh)
-        print(query)
-        print(df)
-        # find_finalcut_image(ra_val, dec_val, dbh, bands=bands, date_start=date_start, date_end=date_end)
+        if 'COMPRESSION' in df.columns:
+            df['FILE'] = df['PATH'].astype(str) + '/' + df['FILENAME'].astype(str) + df['COMPRESSION']
+        else:
+            df['FILE'] = df['PATH'].astype(str) + '/' + df['FILENAME'].astype(str)
+        results.append(df)
+    return results
 
 
 def get_query_finalcut(ra, dec, bands=None, date_start=None, date_end=None):
@@ -194,7 +192,6 @@ def get_query_finalcut(ra, dec, bands=None, date_start=None, date_end=None):
 
     # DATE formatting
     if isinstance(date_start, str) and isinstance(date_end, str):
-        # and_dates = f"DATE_OBS BETWEEN TO_DATE('{date_start}', 'YYYY-MM-DD') AND TO_DATE('{date_end}', 'YYYY-MM-DD')"
         and_dates = f"and DATE_OBS BETWEEN '{date_start}' AND '{date_end}'"
     else:
         and_dates = ''
@@ -203,13 +200,16 @@ def get_query_finalcut(ra, dec, bands=None, date_start=None, date_end=None):
         RA=ra,
         DEC=dec,
         and_bands=and_bands,
-        and_dates=and_dates
-    )
-
+        and_dates=and_dates)
     return query
 
 
 def get_coaddfiles_tilename(tilename, dbh, bands='all'):
+    """
+    Build the query and get the coadd files for a TILENAME
+    Replace to pandas dataframe
+    """
+
     if bands == 'all':
         and_bands = ''
     else:
