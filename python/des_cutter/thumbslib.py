@@ -9,14 +9,12 @@ import sys
 import time
 from collections import OrderedDict
 import copy
-import logging
 import subprocess
 import multiprocessing
 import numpy
 import fitsio
-import astropy
-from astropy.wcs import WCS
-from astropy.nddata import Cutout2D
+import logging
+from logging.handlers import RotatingFileHandler
 from astropy.utils.exceptions import AstropyWarning
 from des_cutter import astrometry
 from des_cutter import wcsutil
@@ -24,7 +22,8 @@ from des_cutter import wcsutil
 import warnings
 warnings.filterwarnings('ignore', category=AstropyWarning, append=True)
 
-SOUT = sys.stdout
+# Logger
+LOGGER = logging.getLogger(__name__)
 
 # Naming template
 PREFIX = 'DECam'
@@ -44,7 +43,6 @@ _CSET3 = ['z', 'i', 'g']
 _CSET4 = ['z', 'i', 'r']
 _CSETS = (_CSET1, _CSET2, _CSET3, _CSET4)
 
-
 # Logger
 LOGGER = logging.getLogger(__name__)
 
@@ -54,20 +52,111 @@ except KeyError:
     DES_CUTTER_DIR = __file__.split('python')[0]
 
 
-def get_NP(MP):
-
-    """ Get the number of processors in the machine
-    if MP == 0, use all available processor
+def configure_logger(logger, MP=False, logfile=None, level=logging.NOTSET,
+                     log_format=None, log_format_date=None):
     """
-    # For it to be a integer
-    MP = int(MP)
-    if MP == 0:
-        NP = int(multiprocessing.cpu_count())
-    elif isinstance(MP, int):
-        NP = MP
+    Configure an existing logger with specified settings. Sets the format,
+    logging level, and handlers for the given logger. If a logfile is provided,
+    logs are written to both the console and the file with rotation. If no log
+    format or date format is provided, default values are used.
+
+    Parameters:
+    - logger (logging.Logger): The logger to configure.
+    - logfile (str, optional): Path to the log file. If `None`, logs to the console.
+    - level (int): Logging level (e.g., `logging.INFO`, `logging.DEBUG`).
+    - log_format (str, optional): Log message format (default is detailed format with function name).
+    - log_format_date (str, optional): Date format for logs (default is `'%Y-%m-%d %H:%M:%S'`).
+    """
+    # Define formats
+    if log_format:
+        FORMAT = log_format
     else:
-        raise ValueError('MP is wrong type: %s, integer type' % MP)
-    return NP
+        FORMAT = '[%(asctime)s.%(msecs)03d][%(levelname)s][%(name)s][%(funcName)s] %(message)s'
+    if log_format_date:
+        FORMAT_DATE = log_format_date
+    else:
+        FORMAT_DATE = '%Y-%m-%d %H:%M:%S'
+
+    # Update logger to see process inforation
+    if MP is True:
+        FORMAT = FORMAT.replace("[%(levelname)s]", "[%(levelname)s-%(processName)s]")
+
+    formatter = logging.Formatter(FORMAT, FORMAT_DATE)
+
+    # Need to set the root logging level as setting the level for each of the
+    # handlers won't be recognized unless the root level is set at the desired
+    # appropriate logging level. For example, if we set the root logger to
+    # INFO, and all handlers to DEBUG, we won't receive DEBUG messages on
+    # handlers.
+    logger.setLevel(level)
+
+    handlers = []
+    # Set the logfile handle if required
+    if logfile:
+        fh = RotatingFileHandler(logfile, maxBytes=2000000, backupCount=10)
+        fh.setFormatter(formatter)
+        fh.setLevel(level)
+        handlers.append(fh)
+        logger.addHandler(fh)
+
+    # Set the screen handle
+    if logger_has_stdout_handler(logger):
+        print("Skipping adding stdout handler")
+        return
+    sh = logging.StreamHandler(sys.stdout)
+    sh.setFormatter(formatter)
+    sh.setLevel(level)
+    handlers.append(sh)
+    logger.addHandler(sh)
+    return
+
+
+def create_logger(logger=None, MP=False, logfile=None,
+                  level=logging.NOTSET, log_format=None, log_format_date=None):
+    """
+    Configures and returns a logger with specified settings.
+    Sets up logging based on provided level, format, and output file. Can be
+    used for both `setup_logging` and other components.
+
+    Parameters:
+    - logger (logging.Logger, optional): The logger to configure. If `None`, a new logger
+      is created.
+    - logfile (str, optional): Path to the log file. If `None`, logs to the console.
+    - level (int): Logging level (e.g., `logging.INFO`, `logging.DEBUG`).
+    - log_format (str, optional): Format for log messages (e.g., `'%(asctime)s - %(message)s'`).
+    - log_format_date (str, optional): Date format for logs (e.g., `'%Y-%m-%d %H:%M:%S'`).
+
+    Returns:
+    logging.Logger: The configured logger instance.
+
+    Raises:
+    - ValueError: If the log level or format is invalid.
+    """
+
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    configure_logger(logger, MP=MP, logfile=logfile, level=level,
+                     log_format=log_format, log_format_date=log_format_date)
+    logging.basicConfig(handlers=logger.handlers, level=level)
+    logger.propagate = False
+    logger.info(f"Logging Created at level:{level}")
+    return logger
+
+
+def logger_has_stdout_handler(logger):
+    """
+    Check whether the given logger has a StreamHandler that
+    writes to sys.stdout.
+    Parameters:
+     logger (logging.Logger): The logger instance to inspect.
+    Returns:
+     bool: True if a StreamHandler writing to sys.stdout is found,
+           False otherwise.
+    """
+    for handler in logger.handlers:
+        if isinstance(handler, logging.StreamHandler) and handler.stream == sys.stdout:
+            return True
+    return False
 
 
 def elapsed_time(t1, verb=False):
@@ -247,7 +336,7 @@ def get_thumbBaseName(ra, dec, objID=None, prefix=PREFIX):
     return outname
 
 
-def get_base_names(tilenames, ra, dec, prefix='DES'):
+def get_base_names(tilenames, ra, dec, prefix=PREFIX):
     names = []
     for k in range(len(ra)):
         if tilenames[k]:
@@ -258,7 +347,7 @@ def get_base_names(tilenames, ra, dec, prefix='DES'):
     return names
 
 
-def update_wcs_matrix(header, x0, y0, proj='TAN'):
+def update_wcs_matrix(header, x0, y0, naxis1, naxis2, proj='TAN'):
     """
     Update the wcs header object with the right CRPIX[1, 2] CRVAL[1, 2] for a
     given subsection
@@ -271,28 +360,16 @@ def update_wcs_matrix(header, x0, y0, proj='TAN'):
     naxis1, naxis2: int
         The number of pixels on each axis.
 
+    proj: the desired projection (TAN/TVP/ZEA)
     Returns:
         fits style header with the new center.
     """
     # We need to make a deep copy/otherwise if fails
     h = copy.deepcopy(header)
-    # Get the astropy.wcs object
-    wcs = WCS(h)
-    # Get the wcsutil wcs object
-    # wcs = wcsutil.WCS(h)
 
     if proj == 'TAN':
-        # Recompute CRVAL1/2 on the new center x0,y0
-        CRVAL1, CRVAL2 = wcs.wcs_pix2world(x0, y0, 1)
-        # Recast numpy objects as floats
-        CRVAL1 = float(CRVAL1)
-        CRVAL2 = float(CRVAL2)
-        # Asign CRPIX1/2 on the new image
-        CRPIX1 = 1
-        CRPIX2 = 1
-        # Update the values
-        h['CRVAL1'] = CRVAL1
-        h['CRVAL2'] = CRVAL2
+        CRPIX1 = float(h['CRPIX1']) - x0 + naxis1/2.
+        CRPIX2 = float(h['CRPIX2']) - y0 + naxis2/2.
         h['CRPIX1'] = CRPIX1
         h['CRPIX2'] = CRPIX2
         h['CTYPE1'] = 'RA---TAN'
@@ -303,17 +380,8 @@ def update_wcs_matrix(header, x0, y0, proj='TAN'):
             h.delete(k)
 
     elif proj == 'TPV':
-        # Recompute CRVAL1/2 on the new center x0,y0
-        CRVAL1, CRVAL2 = wcs.wcs_pix2world(x0, y0, 1)
-        # Recast numpy objects as floats
-        CRVAL1 = float(CRVAL1)
-        CRVAL2 = float(CRVAL2)
-        # Asign CRPIX1/2 on the new image
-        CRPIX1 = 1
-        CRPIX2 = 1
-        # Update the values
-        h['CRVAL1'] = CRVAL1
-        h['CRVAL2'] = CRVAL2
+        CRPIX1 = float(h['CRPIX1']) - x0 + naxis1/2.
+        CRPIX2 = float(h['CRPIX2']) - y0 + naxis2/2.
         h['CRPIX1'] = CRPIX1
         h['CRPIX2'] = CRPIX2
         h['CTYPE1'] = 'RA---TPV'
@@ -339,22 +407,81 @@ def update_wcs_matrix(header, x0, y0, proj='TAN'):
     return h
 
 
-def fitscutter_astropy(filename, ra, dec, objID=None, xsize=1.0, ysize=1.0, units='arcmin',
-                       prefix=PREFIX, outdir=None, tilename=None, counter='', verb=False):
+def get_NP(MP):
+
+    """ Get the number of processors in the machine
+    if MP == 0, use all available processor
+    """
+    # For it to be a integer
+    MP = int(MP)
+    if MP == 0:
+        NP = int(multiprocessing.cpu_count())
+    elif isinstance(MP, int):
+        NP = MP
+    else:
+        raise ValueError('MP is wrong type: %s, integer type' % MP)
+    return NP
+
+
+def fitscutter(filename, ra, dec, objID=None, xsize=1.0, ysize=1.0, units='arcmin',
+               prefix=PREFIX, outdir=None, tilename=None, counter='', logger=None):
 
     """
     Makes cutouts around ra, dec for a give xsize and ysize
     ra,dec can be scalars or lists/arrays
-    """
 
+    Input Parameters
+    ----------------
+    filename: string
+        The fitsfile (fits or fits.fz) to cut from
+    ra, dec: float or array of floats
+        The position in decimal degrees where we can to cut
+
+    Input/Output Parameters
+    -----------------------
+    These are dictionary that need to be inputs to be passed back when
+    running using multiprocessing
+
+    cutout_names: dictionary
+        Dict story the names of the cutout files
+    rejected_names: dictionary
+        Dict of rejected ids per filename with centers outside the FITS files
+        or WGT=0
+    lightcurve: dictionary
+        Dict with lightcurve information
+
+    Optional inputs
+    ---------------
+    xsize, ysize: float or array of floats
+        The x,y size of the stamps in arcmins
+    objID: string or list of string
+        The list of object ID for each ra, dec pair
+    units: string
+        The units for the xsise, ysize
+    prefix: string
+        The prefix to prepend to the output names (i.e.: spt3g)
+    outdir: string
+        The path for the output directory
+    clobber: Bool
+        Overwrite file if they exist
+    logger: logging object
+        Optional logging object
+    counter: string
+        Optional counter to pass on for tracking flow
+
+    Returns:
+        cutout_names
+    """
     # global timer for function
     t1 = time.time()
+    if not logger:
+        logger = LOGGER
     if not outdir:
         outdir = os.getcwd()
 
     # Check and fix inputs
     ra, dec, xsize, ysize, objID = check_inputs(ra, dec, xsize, ysize, objID)
-    print(f"Will cut: {len(ra)} stamps from FITS file: {filename} -- {counter}")
+    logger.info(f"Will cut: {len(ra)} stamps from FITS file: {filename} -- {counter}")
 
     # Check for the units
     if units == 'arcsec':
@@ -369,25 +496,21 @@ def fitscutter_astropy(filename, ra, dec, objID=None, xsize=1.0, ysize=1.0, unit
     # Get header/extensions/hdu
     t0 = time.time()
     header, hdunum = get_headers_hdus(filename)
-    print(f"Done Getting header, hdus: {elapsed_time(t0)}")
+    logger.debug(f"Done Getting header, hdus: {elapsed_time(t0)}")
     extnames = header.keys()
-    print(f"Found EXTNAMES:{extnames}")
+    logger.debug(f"Found EXTNAMES:{extnames}")
 
     # Now we add the tilename to the headers -- if not already present
     if tilename and 'TILENAME' not in header['SCI']:
-        if verb:
-            SOUT.write(f"Will add TILENAME keyword to header for file: {filename}\n")
+        logger.info(f"Will add TILENAME keyword to header for file: {filename}\n")
         tile_rec = {'name': 'TILENAME', 'value': tilename, 'comment': 'Name of DES parent TILENAME'}
         for EXTNAME in extnames:
             header[EXTNAME].add_record(tile_rec)
 
     # Get the pixel-scale of the input image
     pixelscale = astrometry.get_pixelscale(header['SCI'], units='arcsec')
-
-    # Read in wcs with astropy
-    wcs = WCS(header['SCI'], relax=True)
     # Read in the WCS with wcsutil
-    # wcs = wcsutil.WCS(header['SCI'])
+    wcs = wcsutil.WCS(header['SCI'])
 
     # Get the dimensions of the parent image
     if 'EXTNAME' in header['SCI'] and header['SCI']['EXTNAME'].strip() == 'COMPRESSED_IMAGE':
@@ -413,10 +536,21 @@ def fitscutter_astropy(filename, ra, dec, objID=None, xsize=1.0, ysize=1.0, unit
     else:
         expnum = 'coadd'
 
+    if 'CTYPE1' in header['SCI']:
+        if header['SCI']['CTYPE1'].endswith("-TAN"):
+            proj = 'TAN'
+        elif header['SCI']['CTYPE1'].endswith("-TPV"):
+            proj = 'TPV'
+        else:
+            raise NameError(f"Projection: {proj} not implemented")
+        logger.debug(f"Will use prpjection: {proj} for {filename}")
+    else:
+        logger.debug(f"CTYPE1 not found for {filename}")
+
     # Intitialize the FITS object
     t0 = time.time()
     ifits = fitsio.FITS(filename, 'r')
-    print(f"DEBUG: Done loading fitsio.FITS({filename}): {elapsed_time(t0)}")
+    logger.debug(f"Done loading fitsio.FITS({filename}): {elapsed_time(t0)}")
 
     ######################################
     # Loop over ra/dec and xsize,ysize
@@ -425,15 +559,14 @@ def fitscutter_astropy(filename, ra, dec, objID=None, xsize=1.0, ysize=1.0, unit
         # The basename for the (ra,dec)
         if objID[k] is None:
             objID[k] = get_thumbBaseName(ra[k], dec[k], prefix=prefix)
-        print(f"DEBUG: Defined objID: {objID[k]}")
+        logger.debug(f"Defined objID: {objID[k]}")
 
         # image and header sections
         im_section = OrderedDict()
         h_section = OrderedDict()
 
         # Define the geometry of the thumbnail
-        x0, y0 = wcs.wcs_world2pix(ra[k], dec[k], 0)
-        # x0, y0 = wcs.sky2image(ra[k], dec[k])
+        x0, y0 = wcs.sky2image(ra[k], dec[k])
         x0 = round(float(x0))
         y0 = round(float(y0))
         dx = int(0.5*xsize[k]*scale/pixelscale)
@@ -447,8 +580,8 @@ def fitscutter_astropy(filename, ra, dec, objID=None, xsize=1.0, ysize=1.0, unit
 
         # Make sure the (x0,y0) is contained within the image
         if x0 < 0 or y0 < 0 or x0 > NAXIS1 or y0 > NAXIS2:
-            print(f"WARNING: Rejected {objID[k]} (RA,DEC):{ra[k]},{dec[k]} outside {filename}")
-            print(f"WARNING: Rejected {objID[k]} (x0,y0):{x0},{y0} > {NAXIS1},{NAXIS2}")
+            logger.warning(f"Rejected {objID[k]} (RA,DEC):{ra[k]},{dec[k]} outside {filename}")
+            logger.warning(f"Rejected {objID[k]} (x0,y0):{x0},{y0} > {NAXIS1},{NAXIS2}")
             # rejected_ids.append(objID[k])
             continue
 
@@ -463,340 +596,45 @@ def fitscutter_astropy(filename, ra, dec, objID=None, xsize=1.0, ysize=1.0, unit
         if x2 > NAXIS1:
             x2 = NAXIS1
 
-        print(f"DEBUG: Working on object:{k} -- {objID[k]}")
-        print(f"DEBUG: Found naxis1,naxis2: {naxis1},{naxis2}")
-        print(f"DEBUG: Found x0,x1,x2: {x0} - {x1},{x2}")
-        print(f"DEBUG: Found y0,y1,y2: {y0} - {y1},{y2}")
+        logger.debug(f"Working on object:{k} -- {objID[k]}")
+        logger.debug(f"Found naxis1,naxis2: {naxis1},{naxis2}")
+        logger.debug(f"Found x0,x1,x2: {x0},{x1},{x2}")
+        logger.debug(f"Found y0,y1,y2: {y0},{y1},{y2}")
 
-        hdul_output = astropy.io.fits.HDUList()
-        hdul_input = astropy.io.fits.open(filename)
+        # Now we cut the fits stamp -- loop over HDUs/EXTNAMES
         for EXTNAME in extnames:
             # The hdunum for that extname
             HDUNUM = hdunum[EXTNAME]
             # Create a canvas
-            # im_section[EXTNAME] = numpy.zeros((naxis1, naxis2))
+            im_section[EXTNAME] = numpy.zeros((naxis1, naxis2))
             # Read in the image section we want for SCI/WGT
-            # im_section[EXTNAME] = ifits[HDUNUM][int(y1):int(y2), int(x1):int(x2)]
-            data = hdul_input[HDUNUM].data
-            hdr = hdul_input[HDUNUM].header
-            wcs = WCS(hdr, relax=True)
-            cutout = Cutout2D(data, (x0, y0), (naxis1, naxis2), wcs=wcs, mode='strict')
-
+            im_section[EXTNAME] = ifits[HDUNUM][int(y1):int(y2), int(x1):int(x2)]
             # Correct NAXIS1 and NAXIS2
-            # naxis1 = numpy.shape(im_section[EXTNAME])[1]
-            # naxis2 = numpy.shape(im_section[EXTNAME])[0]
+            naxis1 = numpy.shape(im_section[EXTNAME])[1]
+            naxis2 = numpy.shape(im_section[EXTNAME])[0]
             # Update the WCS in the headers and make a copy
-            # rec = {'name': 'OBJECT', 'value': objID[k], 'comment': 'Name of the objID'}
-            # h_section[EXTNAME].add_record(rec)
-            # h_section[EXTNAME] = update_wcs_matrix(header[EXTNAME], x0, y0, proj='TPV')
+            h_section[EXTNAME] = update_wcs_matrix(header['SCI'], x0, y0, naxis1, naxis2, proj=proj)
             # Add the objID to the header of the thumbnail
-            # h_section[EXTNAME] = copy.deepcopy(header[EXTNAME])
-
-            # Start from the original header
-            new_hdr = hdr.copy()
-            # Remove legacy linear-transform keywords that can conflict after slicing
-            for j in ("LTV1", "LTV2", "LTM1_1", "LTM1_2", "LTM2_1", "LTM2_2"):
-                if j in new_hdr:
-                    del new_hdr[j]
-
-            # Overwrite WCS cards with the adjusted cutout WCS.
-            # relax=True keeps TPV PV* terms.
-            wcs_hdr = cutout.wcs.to_header(relax=True)
-
-            # First strip all existing WCS keys to avoid duplicates
-            for j in list(wcs_hdr.keys()):
-                if j in new_hdr:
-                    del new_hdr[j]
-            # Then insert the updated WCS
-            new_hdr.update(wcs_hdr)
-
-            # Optional: carry over a useful EXTNAME
-            new_hdr['EXTNAME'] = ('SCI', 'science cutout')
-
-            # hdr.update(wcs.to_header())
-            hdu_section = astropy.io.fits.ImageHDU(data=cutout.data, header=new_hdr)
-            hdul_output.append(hdu_section)
+            rec = {'name': 'OBJECT', 'value': objID[k], 'comment': 'Name of the objID'}
+            h_section[EXTNAME].add_record(rec)
 
         # Get the basedir
         basedir = get_thumbBaseDirName(ra[k], dec[k], objID=objID[k], prefix=prefix, outdir=outdir)
         if not os.path.exists(basedir):
             os.makedirs(basedir, mode=0o755, exist_ok=True)
-
         # Construct the name of the Thumbmail using BAND/FILTER/prefix/etc
-        outname = get_thumbFitsName(ra[k], dec[k], band, expnum=expnum, prefix=prefix, outdir=basedir)
-
-        # Write out FITS file using astr
-        hdul_output.writeto(outname, overwrite=True)
-
-        # Write out the file
-        # ofits = fitsio.FITS(outname, 'rw', clobber=True)
-        # for EXTNAME in extnames:
-        #    ofits.write(im_section[EXTNAME], extname=EXTNAME, header=h_section[EXTNAME])
-        # ofits.close()
-        if verb:
-            SOUT.write("# Wrote: %s\n" % outname)
-
-    ifits.close()
-    print(f"Done filename: {filename} in {elapsed_time(t1)} -- {counter}")
-    return
-
-
-def fitscutter(filename, ra, dec, objID=None, xsize=1.0, ysize=1.0, units='arcmin',
-               prefix=PREFIX, outdir=os.getcwd(), tilename=None, verb=False):
-
-    """
-    Makes cutouts around ra, dec for a give xsize and ysize
-    ra,dec can be scalars or lists/arrays
-    """
-    # Check and fix inputs
-    ra, dec, xsize, ysize, objID = check_inputs(ra, dec, xsize, ysize, objID)
-
-    # Check for the units
-    if units == 'arcsec':
-        scale = 1
-    elif units == 'arcmin':
-        scale = 60
-    elif units == 'degree':
-        scale = 3600
-    else:
-        sys.exit("ERROR: must define units as arcses/arcmin/degree only")
-
-    # Get header/extensions/hdu
-    header, hdunum = get_headers_hdus(filename)
-    extnames = header.keys()
-
-    # Now we add the tilename to the headers -- if not already present
-    if tilename and 'TILENAME' not in header['SCI']:
-        if verb:
-            SOUT.write(f"Will add TILENAME keyword to header for file: {filename}\n")
-        tile_rec = {'name': 'TILENAME', 'value': tilename, 'comment': 'Name of DES parent TILENAME'}
-        for EXTNAME in extnames:
-            header[EXTNAME].add_record(tile_rec)
-
-    # Get the pixel-scale of the input image
-    pixelscale = astrometry.get_pixelscale(header['SCI'], units='arcsec')
-    # Read in the WCS with wcsutil
-    wcs = wcsutil.WCS(header['SCI'])
-    # Read in wcs with astropy
-    #wcs = WCS(header['SCI'])
-
-    # Extract the band/filter from the header
-    if 'BAND' in header['SCI']:
-        band = header['SCI']['BAND'].strip()
-    elif 'FILTER' in header['SCI']:
-        band = header['SCI']['FILTER'].strip()
-    else:
-        raise Exception("ERROR: Cannot provide suitable BAND/FILTER from SCI header")
-
-    if 'EXPNUM' in header['SCI']:
-        expnum = str(header['SCI']['EXPNUM']).strip()
-    else:
-        expnum = 'coadd'
-
-    if 'CTYPE1' in header['SCI']:
-        if header['SCI']['CTYPE1'] == 'RA---TAN':
-            proj = 'TAN'
-        elif header['SCI']['CTYPE1'] == 'RA---TPV':
-            proj = 'TPV'
-        else:
-            raise NameError(f"Projection: {proj} not implemented")
-        print(f"DEBUG: Will use prpjection: {proj} for {filename}")
-    else:
-        print(f"DEBUG: CTYPE1 not found for {filename}")
-
-
-    # Intitialize the FITS object
-    ifits = fitsio.FITS(filename, 'r')
-
-    ######################################
-    # Loop over ra/dec and xsize,ysize
-    for k in range(len(ra)):
-
-        # The basename for the (ra,dec)
-        if objID[k] is None:
-            objID[k] = get_thumbBaseName(ra[k], dec[k], prefix=prefix)
-
-        # Define the geometry of the thumbnail
-        x0, y0 = wcs.sky2image(ra[k], dec[k])
-        #x0, y0 = wcs.wcs_world2pix(ra[k], dec[k], 0)
-        yL = 10000
-        xL = 10000
-        x0 = numpy.round(x0)
-        y0 = numpy.round(y0)
-        dx = int(0.5*xsize[k]*scale/pixelscale)
-        dy = int(0.5*ysize[k]*scale/pixelscale)
-        naxis1 = 2*dx
-        naxis2 = 2*dy
-        y1 = y0-dy
-        y2 = y0+dy
-        x1 = x0-dx
-        x2 = x0+dx
-
-        if y1 < 0:
-            y1 = 0
-            dy = y0
-            y2 = y0 + dy
-        if y2 > yL:
-            y2 = yL
-            dy = yL - y0
-            y1 = y0-dy
-
-        if x1 < 0:
-            x1 = 0
-            dx = x0
-            x2 = x0 + dx
-        if x2 > xL:
-            x2 = xL
-            dx = xL - x0
-            x1 = x0 - dx
-        im_section = OrderedDict()
-        h_section = OrderedDict()
-        for EXTNAME in extnames:
-            # The hdunum for that extname
-            HDUNUM = hdunum[EXTNAME]
-            # Create a canvas
-            im_section[EXTNAME] = numpy.zeros((naxis1, naxis2))
-            # Read in the image section we want for SCI/WGT
-            im_section[EXTNAME] = ifits[HDUNUM][int(y1):int(y2), int(x1):int(x2)]
-            # Correct NAXIS1 and NAXIS2
-            naxis1 = numpy.shape(im_section[EXTNAME])[1]
-            naxis2 = numpy.shape(im_section[EXTNAME])[0]
-            # Update the WCS in the headers and make a copy
-            # h_section[EXTNAME] = update_wcs_matrix(header[EXTNAME],x0,y0,naxis1,naxis2,ra[k],dec[k])
-            h_section[EXTNAME] = update_wcs_matrix(header[EXTNAME], x0, y0, proj=proj)
-
-        # Get the basedir
-        basedir = get_thumbBaseDirName(ra[k], dec[k], objID=objID[k], prefix=prefix, outdir=outdir)
-        if not os.path.exists(basedir):
-            os.makedirs(basedir, mode=0o755, exist_ok=True)
-
-        # Construct the name of the Thumbmail using BAND/FILTER/prefix/etc
-        outname = get_thumbFitsName(ra[k], dec[k], band, expnum=expnum, prefix=prefix, outdir=basedir)
-
+        outname = get_thumbFitsName(ra[k], dec[k], band, objID=objID[k],
+                                    expnum=expnum, prefix=prefix, outdir=basedir)
         # Write out the file
         ofits = fitsio.FITS(outname, 'rw', clobber=True)
         for EXTNAME in extnames:
             ofits.write(im_section[EXTNAME], extname=EXTNAME, header=h_section[EXTNAME])
 
         ofits.close()
-        if verb:
-            SOUT.write("# Wrote: %s\n" % outname)
+        logger.info(f"Done writing {outname}: {elapsed_time(t0)}")
 
     ifits.close()
-    print(f"Done with: {filename}")
-    return
-
-
-def fitscutter_old(filename, ra, dec, xsize=1.0, ysize=1.0, units='arcmin',
-                   prefix='DES', outdir=os.getcwd(), tilename=None, verb=False):
-
-    """
-    Makes cutouts around ra, dec for a give xsize and ysize
-    ra,dec can be scalars or lists/arrays
-    """
-    # Check and fix inputs
-    ra, dec, xsize, ysize = check_inputs(ra, dec, xsize, ysize)
-
-    # Check for the units
-    if units == 'arcsec':
-        scale = 1
-    elif units == 'arcmin':
-        scale = 60
-    elif units == 'degree':
-        scale = 3600
-    else:
-        sys.exit("ERROR: must define units as arcses/arcmin/degree only")
-
-    # Get header/extensions/hdu
-    header, hdunum = get_headers_hdus(filename)
-    extnames = header.keys()
-
-    # Now we add the tilename to the headers -- if not already present
-    if tilename and 'TILENAME' not in header['SCI']:
-        if verb:
-            SOUT.write(f"Will add TILENAME keyword to header for file: {filename}\n")
-        tile_rec = {'name': 'TILENAME', 'value': tilename, 'comment': 'Name of DES parent TILENAME'}
-        for EXTNAME in extnames:
-            header[EXTNAME].add_record(tile_rec)
-
-    # Get the pixel-scale of the input image
-    pixelscale = astrometry.get_pixelscale(header['SCI'], units='arcsec')
-
-    # Read in the WCS with wcsutil
-    wcs = wcsutil.WCS(header['SCI'])
-    # Extract the band/filter from the header
-    if 'BAND' in header['SCI']:
-        band = header['SCI']['BAND'].strip()
-    elif 'FILTER' in header['SCI']:
-        band = header['SCI']['FILTER'].strip()
-    else:
-        raise Exception("ERROR: Cannot provide suitable BAND/FILTER from SCI header")
-
-    # Intitialize the FITS object
-    ifits = fitsio.FITS(filename, 'r')
-
-    ######################################
-    # Loop over ra/dec and xsize,ysize
-    for k in range(len(ra)):
-        # Define the geometry of the thumbnail
-        x0, y0 = wcs.sky2image(ra[k], dec[k])
-        yL = 10000
-        xL = 10000
-        x0 = numpy.round(x0)
-        y0 = numpy.round(y0)
-        dx = int(0.5*xsize[k]*scale/pixelscale)
-        dy = int(0.5*ysize[k]*scale/pixelscale)
-        naxis1 = 2*dx
-        naxis2 = 2*dy
-        y1 = y0-dy
-        y2 = y0+dy
-        x1 = x0-dx
-        x2 = x0+dx
-
-        if y1 < 0:
-            y1 = 0
-            dy = y0
-            y2 = y0 + dy
-        if y2 > yL:
-            y2 = yL
-            dy = yL - y0
-            y1 = y0-dy
-
-        if x1 < 0:
-            x1 = 0
-            dx = x0
-            x2 = x0 + dx
-        if x2 > xL:
-            x2 = xL
-            dx = xL - x0
-            x1 = x0 - dx
-        im_section = OrderedDict()
-        h_section = OrderedDict()
-        for EXTNAME in extnames:
-            # The hdunum for that extname
-            HDUNUM = hdunum[EXTNAME]
-            # Create a canvas
-            im_section[EXTNAME] = numpy.zeros((naxis1, naxis2))
-            # Read in the image section we want for SCI/WGT
-            im_section[EXTNAME] = ifits[HDUNUM][int(y1):int(y2), int(x1):int(x2)]
-            # Correct NAXIS1 and NAXIS2
-            naxis1 = numpy.shape(im_section[EXTNAME])[1]
-            naxis2 = numpy.shape(im_section[EXTNAME])[0]
-            # Update the WCS in the headers and make a copy
-            # h_section[EXTNAME] = update_wcs_matrix(header[EXTNAME],x0,y0,naxis1,naxis2,ra[k],dec[k])
-            h_section[EXTNAME] = update_wcs_matrix(header[EXTNAME], x0, y0)
-        # Construct the name of the Thumbmail using BAND/FILTER/prefix/etc
-        outname = get_thumbFitsName(ra[k], dec[k], band, prefix=prefix, outdir=outdir)
-
-        # Write out the file
-        ofits = fitsio.FITS(outname, 'rw', clobber=True)
-        for EXTNAME in extnames:
-            ofits.write(im_section[EXTNAME], extname=EXTNAME, header=h_section[EXTNAME])
-
-        ofits.close()
-        if verb:
-            SOUT.write("# Wrote: %s\n" % outname)
-
+    logger.info(f"Done filename: {filename} in {elapsed_time(t1)} -- {counter}")
     return
 
 
@@ -872,7 +710,7 @@ def color_radec(ra, dec, avail_bands,
     CSET = get_colorset(avail_bands, colorset)
 
     if CSET is False:
-        SOUT.write("# WARNING: Could not find a suitable filter set for color image for ra,dec: %s,%s\n" % (ra, dec))
+        LOGGER.warning(f"Could not find a suitable filter set for color image for ra,dec: {ra},{dec}")
         return
 
     # ----------------------------------- ##
@@ -885,20 +723,19 @@ def color_radec(ra, dec, avail_bands,
     # Set the names of the input files
     fitsfiles = []
     for BAND in CSET:
-        fitsthumb = get_thumbFitsName(ra, dec, BAND, prefix='DES', ext='fits', outdir=basedir)
+        fitsthumb = get_thumbFitsName(ra, dec, BAND, prefix=PREFIX, ext='fits', outdir=basedir)
         fitsfiles.append("%s" % fitsthumb)
 
     # Build the cmd to call
     logfile = get_thumbLogName(ra, dec, prefix=prefix, ext='stifflog', outdir=outdir)
     log = open(logfile, "w")
     cmd = make_stiff_call(fitsfiles, tiffname, stiff_parameters=stiff_parameters, list=False)
-    print("RUNNING STIFF CMD:\n\t", cmd)
+    LOGGER.info(f"RUNNING STIFF CMD:\n{cmd}")
     status = subprocess.call(cmd, shell=True, stdout=log, stderr=log)
     if status > 0:
-        SOUT.write("***\nERROR while running Stiff***\n")
+        LOGGER.error("***ERROR while running Stiff***")
     else:
-        if verb:
-            SOUT.write(f"# Total stiff time: {elapsed_time(t0)}\n")
+        LOGGER.info(f"# Total stiff time: {elapsed_time(t0)}")
 
     # ----------------------------------- ##
 
@@ -925,5 +762,5 @@ if __name__ == "__main__":
     ysize = [5]*len(ra)
 
     t0 = time.time()
-    fitscutter(filename, ra, dec, xsize=xsize, ysize=ysize, units='arcmin', prefix='DES', tilename=tilename, verb=True)
-    SOUT.write(f"Done: {elapsed_time(t0)}\n")
+    fitscutter(filename, ra, dec, xsize=xsize, ysize=ysize, units='arcmin', prefix='DES', tilename=tilename)
+    print(f"Done: {elapsed_time(t0)}")

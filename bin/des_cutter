@@ -3,20 +3,23 @@
 import sys
 import traceback
 import des_cutter
+import logging
 
 if __name__ == "__main__":
     # Get the command-line arguments
     args = des_cutter.makeDESthumbslib.cmdline()
     # Run the maker
     try:
+        des_cutter.makeDESthumbslib.prepare(args)
         des_cutter.makeDESthumbslib.run(args)
         des_cutter.makeDESthumbslib.run_finalcut(args)
     except Exception:
+        LOGGER = logging.getLogger(__name__)
         (type, value, my_traceback) = sys.exc_info()
         string_trace = traceback.format_exception(type, value, my_traceback)
         # write string into log
         for line in string_trace:
-            args.sout.write(line)
+            LOGGER.error(line)
 
         # Finally raise
         raise

@@ -1,5 +1,3 @@
-
-import sys
 import collections
 import socket
 import numpy
@@ -10,13 +8,12 @@ import logging
 
 warnings.filterwarnings("ignore", category=UserWarning, message=".*pandas only supports SQLAlchemy.*")
 
-
-SOUT = sys.stdout
+# Logger
+LOGGER = logging.getLogger(__name__)
+logger = LOGGER
 
 XSIZE_DEFAULT = 10.0
 YSIZE_DEFAULT = 10.0
-
-logger = logging.getLogger(__name__)
 
 
 def check_columns(cols, req_cols):
@@ -119,7 +116,7 @@ def find_tilename_radec(ra, dec, con, tag='Y6A2'):
     tilenames_dict = query2dict_of_columns(query, con, array=False)
 
     if len(tilenames_dict) < 1:
-        SOUT.write(f"# WARNING: No tile found at ra:{ra}, dec:{dec}\n")
+        LOGGER.warning(f"No tile found at ra:{ra}, dec:{dec}\n")
         return False
     else:
         return tilenames_dict['TILENAME'][0]
@@ -224,13 +221,13 @@ def get_coaddfiles_tilename(tilename, dbh, bands='all'):
               {and_BANDS} TILENAME='{TILENAME}'"""
 
     query = QUERY_COADDFILES.format(TILENAME=tilename, and_BANDS=and_bands)
-    print(query)
+    LOGGER.info(f"Running query: {query}")
     rec = query2rec(query, dbh)
     # Return a record array with the query
     return rec
 
 
-def get_archive_root(verb=False):
+def get_archive_root():
     """Function retreives the archive root"""
 
     if 'DES_ARCHIVE_ROOT' in os.environ:
@@ -246,6 +243,5 @@ def get_archive_root(verb=False):
             logger.warning(f"archive_root undefined for: {address}")
             archive_root = ''
 
-    if verb:
-        SOUT.write(f"# Getting the archive root: {archive_root}\n")
+    LOGGER.debug(f"Getting the archive root: {archive_root}\n")
     return archive_root

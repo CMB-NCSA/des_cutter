@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-from astropy.wcs import WCS
 import logging
 import copy
 import fitsio
@@ -34,24 +33,10 @@ def update_wcs_matrix(header, x0, y0, naxis1, naxis2, proj='TAN'):
     """
     # We need to make a deep copy/otherwise if fails
     h = copy.deepcopy(header)
-    # Get the astropy.wcs object
-    # wcs = WCS(h)
-    # Get the wcsutil wcs object
-    wcs = wcsutil.WCS(h)
 
     if proj == 'TAN':
-        # Recompute CRVAL1/2 on the new center x0,y0
-        # CRVAL1, CRVAL2 = wcs.wcs_pix2world(x0, y0, 1)
-        CRVAL1, CRVAL2 = wcs.image2sky(x0, y0)
-        # Recast numpy objects as floats
-        CRVAL1 = float(CRVAL1)
-        CRVAL2 = float(CRVAL2)
-        # Asign CRPIX1/2 on the new image
-        CRPIX1 = int(naxis1/2.)
-        CRPIX2 = int(naxis2/2.)
-        # Update the values
-        h['CRVAL1'] = CRVAL1
-        h['CRVAL2'] = CRVAL2
+        CRPIX1 = float(h['CRPIX1']) - x0 + naxis1/2.
+        CRPIX2 = float(h['CRPIX2']) - y0 + naxis2/2.
         h['CRPIX1'] = CRPIX1
         h['CRPIX2'] = CRPIX2
         h['CTYPE1'] = 'RA---TAN'
@@ -68,6 +53,10 @@ def update_wcs_matrix(header, x0, y0, naxis1, naxis2, proj='TAN'):
         h['CRPIX2'] = CRPIX2
         h['CTYPE1'] = 'RA---TPV'
         h['CTYPE2'] = 'DEC--TPV'
+        # Delete some key that are not needed
+        dkeys = ['PROJ', 'LONPOLE', 'LATPOLE', 'POLAR', 'ALPHA0', 'DELTA0', 'X0', 'Y0']
+        for k in dkeys:
+            h.delete(k)
 
     elif proj == 'ZEA':
         CRPIX1 = float(h['CRPIX1']) - x0
@@ -123,10 +112,17 @@ def cutter(filename, ra, dec, xsize, ysize, units='arcmin'):
 
     outfile_astropy = f"stamp_astropy_{filename}"
 
+    if header['SCI']['CTYPE1'].endswith("-TAN"):
+        proj = 'TAN'
+    elif header['SCI']['CTYPE1'].endswith("-TPV"):
+        proj = 'TPV'
+    else:
+        proj = None
+
     # Cut with astropy
     with fits.open(filename) as hdul:
         hdu = hdul['SCI']
-        cut = Cutout2D(hdu.data, (x0, y0), (naxis1, naxis2), wcs=wcs_astropy, mode='strict')
+        cut = Cutout2D(hdu.data, (x0, y0), (naxis1, naxis2), wcs=wcs_astropy)
         # Start from the original header
         hdr = hdu.header.copy()
         hdr.update(cut.wcs.to_header(relax=True))
@@ -138,10 +134,11 @@ def cutter(filename, ra, dec, xsize, ysize, units='arcmin'):
     outfile_fitsio = f"stamp_fitsio_{filename}"
     ifits = fitsio.FITS(filename, 'r')
     im_section = ifits['SCI'][int(y1):int(y2), int(x1):int(x2)]
-    hdr = update_wcs_matrix(header['SCI'], x0, y0, naxis1, naxis2, proj='TPV')
+    hdr = update_wcs_matrix(header['SCI'], x0, y0, naxis1, naxis2, proj=proj)
     ofits = fitsio.FITS(outfile_fitsio, 'rw', clobber=True)
     ofits.write(im_section, extname='SCI', header=hdr)
     ofits.close()
+    ifits.close()
     print(f"Wrote: {outfile_fitsio}")
     return
 
@@ -150,8 +147,8 @@ if __name__ == "__main__":
     # Define position and size
     ra = 15.71875
     dec = -49.24944
-    xsize = 1
-    ysize = 1
+    xsize = 2
+    ysize = 2
 
     filename = 'DES0102-4914_r4907p01_i.fits.fz'
     cutter(filename, ra, dec, xsize, ysize)

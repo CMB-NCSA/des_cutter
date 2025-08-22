@@ -7,6 +7,7 @@ import argparse
 import pandas
 import duckdb
 import des_cutter
+import logging
 from des_cutter import fitsfinder
 from des_cutter import thumbslib
 
@@ -15,7 +16,6 @@ YSIZE_DEFAULT = 1.0
 
 
 def cmdline():
-    """Command line parser"""
     parser = argparse.ArgumentParser(description="Retrieves FITS fits within DES and creates thumbnails for a list \
                                                   of sky positions")
     # The positional arguments
@@ -31,8 +31,8 @@ def cmdline():
     parser.add_argument("--bands", type=str, action='store', nargs='+', default='all',
                         help="Bands used for images. Can either be 'all' "
                         "(uses all bands, and is the default), or a list of individual bands")
-    parser.add_argument("--prefix", type=str, action='store', default='DES',
-                        help="Prefix for thumbnail filenames [default='DES']")
+    parser.add_argument("--prefix", type=str, action='store', default=thumbslib.PREFIX,
+                        help=f"Prefix for thumbnail filenames [default={thumbslib.PREFIX}]")
     parser.add_argument("--tag", type=str, action='store', default='Y6A2',
                         help="Table TAG to use [default='Y6A2'")
     parser.add_argument("--date_start", type=str, action='store', default=None,
@@ -46,12 +46,25 @@ def cmdline():
                         help="Run in multiple core [default=False]")
     parser.add_argument("--np", action="store", default=1, type=int,
                         help="Run using multi-process, 0=automatic, 1=single-process [default]")
-    parser.add_argument("--verb", action='store_true', default=False,
-                        help="Turn on verbose mode [default=False]")
     parser.add_argument("--outdir", type=str, action='store', default=os.getcwd(),
                         help="Output directory location [default='./']")
     parser.add_argument("--logfile", type=str, action='store', default=None,
                         help="Output logfile")
+
+    # Logging options (loglevel/log_format/log_format_date)
+    if 'LOG_LEVEL' in os.environ:
+        default_log_level = os.environ['LOG_LEVEL']
+    else:
+        default_log_level = 'INFO'
+    default_log_format = '[%(asctime)s.%(msecs)03d][%(levelname)s][%(name)s][%(funcName)s] %(message)s'
+    default_log_format_date = '%Y-%m-%d %H:%M:%S'
+    parser.add_argument("--loglevel", action="store", default=default_log_level, type=str.upper,
+                        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                        help="Logging Level [DEBUG/INFO/WARNING/ERROR/CRITICAL]")
+    parser.add_argument("--log_format", action="store", type=str, default=default_log_format,
+                        help="Format for logging")
+    parser.add_argument("--log_format_date", action="store", type=str, default=default_log_format_date,
+                        help="Format for date section of logging")
 
     args = parser.parse_args()
 
@@ -63,36 +76,39 @@ def cmdline():
     else:
         raise ValueError('Both --date_start and --date_end must be defined')
 
-    if args.logfile:
-        sout = open(args.logfile, 'w', encoding="utf-8")
-    else:
-        sout = sys.stdout
-    args.sout = sout
-    sout.write("# Will run:\n")
-    sout.write(f"# {parser.prog} \n")
-    for key, value in vars(args).items():
-        if key == "password":
-            continue
-        sout.write(f"# \t--{key:<10}\t{value}\n")
     return args
 
 
-def run_finalcut(args):
-    # The write log handle
-    sout = args.sout
-    des_cutter.fitsfinder.SOUT = args.sout
-    des_cutter.thumbslib.SOUT = args.sout
+def prepare(args):
 
     # Get the number of processors to use
     NP = thumbslib.get_NP(args.np)
-    if NP > 1:
+    if NP > 1 or args.MP:
         MP = True
     else:
         MP = False
 
+    # Create logger
+    logger = logging.getLogger(__name__)
+    thumbslib.create_logger(logger, level=args.loglevel, MP=MP,
+                            log_format=args.log_format,
+                            log_format_date=args.log_format_date)
+
+    logger.info(f"Received command call:\n{' '.join(sys.argv[0:-1])}")
+    logger.info(f"Running spt3g_cutter:{des_cutter.__version__}")
+    logger.info(f"Running with args: \n{args}")
+    return logger
+
+
+def run_finalcut(args):
+
+    logger = logging.getLogger(__name__)
+
+    # Get the number of processors to use
+    NP = thumbslib.get_NP(args.np)
     if NP > 1:
         p = mp.Pool(processes=NP)
-        print(f"Will use {NP} processors for process")
+        logger.info(f"Will use {NP} processors for process")
         manager = mp.Manager()
         cutout_dict = manager.dict()
         rejected_dict = manager.dict()
@@ -117,17 +133,15 @@ def run_finalcut(args):
     dbh = duckdb.connect(args.dbname, read_only=True)
 
     # Get archive_root
-    archive_root = fitsfinder.get_archive_root(verb=True)
+    archive_root = fitsfinder.get_archive_root()
 
     # Make sure that outdir exists
     if not os.path.exists(args.outdir):
-        if args.verb:
-            sout.write(f"# Creating: {args.outdir}")
+        logger.info(f"Creating: {args.outdir}")
         os.makedirs(args.outdir)
 
     # Find all of the tilenames, indices grouped per tile
-    if args.verb:
-        sout.write("# Finding FINALCUT images for each input (ra, dec) position\n")
+    logger.info("Finding FINALCUT images for each input (ra, dec) position")
     # Get the list of finalcut filenames
     df_images = fitsfinder.find_finalcut_images(ra, dec, dbh,
                                                 date_start=args.date_start,
@@ -137,17 +151,14 @@ def run_finalcut(args):
     for i, (ra_val, dec_val) in enumerate(zip(ra, dec)):
         df = df_images[i]
         Nfiles = len(df)
-        print(i, ra_val, dec_val, Nfiles)
         # Loop over the files for each position
         for k in range(Nfiles):
             filename = os.path.join(archive_root, df.FILE[k])
-            # scamp_head = os.path.join(archive_root, df.SCAMP_HEAD[k])
-            # counter = f"{k}/{Nfiles} files"
+            counter = f"{k+1}/{Nfiles} files"
             ar = (filename, ra_val, dec_val)
             kw = {'xsize': xsize[i], 'ysize': ysize[i],
                   'units': 'arcmin', 'prefix': args.prefix,
-                  'outdir': args.outdir, # 'counter': counter,
-                  'verb': args.verb}
+                  'outdir': args.outdir, 'counter': counter}
 
             if NP > 1:
                 # Get result to catch exceptions later, after close()
@@ -156,7 +167,6 @@ def run_finalcut(args):
             else:
 
                 thumbslib.fitscutter(*ar, **kw)
-            #print(i, k, filename)
 
     # Close/join mp processes
     if NP > 1:
@@ -170,10 +180,9 @@ def run_finalcut(args):
 
 
 def run(args):
-    # The write log handle
-    sout = args.sout
-    des_cutter.fitsfinder.SOUT = args.sout
-    des_cutter.thumbslib.SOUT = args.sout
+
+    # Get the logger
+    logger = logging.getLogger(__name__)
 
     # Read in CSV file with pandas
     df = pandas.read_csv(args.inputList)
@@ -191,17 +200,15 @@ def run(args):
     dbh = duckdb.connect(args.dbname, read_only=True)
 
     # Get archive_root
-    archive_root = fitsfinder.get_archive_root(verb=True)
+    archive_root = fitsfinder.get_archive_root()
 
     # Make sure that outdir exists
     if not os.path.exists(args.outdir):
-        if args.verb:
-            sout.write(f"# Creating: {args.outdir}")
+        logger.info(f"Creating: {args.outdir}")
         os.makedirs(args.outdir)
 
     # Find all of the tilenames, indices grouped per tile
-    if args.verb:
-        sout.write("# Finding tilename for each input position\n")
+    logger.info("Finding tilename for each input position")
     tilenames, indices, tilenames_matched = fitsfinder.find_tilenames_radec(ra, dec, dbh, tag=args.tag)
 
     # Add them back to pandas dataframe and write a file
@@ -210,7 +217,7 @@ def run(args):
     df['THUMBNAME'] = thumbslib.get_base_names(tilenames_matched, ra, dec, prefix=args.prefix)
     matched_list = os.path.join(args.outdir, 'matched_'+os.path.basename(args.inputList))
     df.to_csv(matched_list, index=False)
-    sout.write(f"# Wrote matched tilenames list to: {matched_list}\n")
+    logger.info(f"Wrote matched tilenames list to: {matched_list}")
 
     # Store the files used
     files_used = os.path.join(args.outdir, 'files_used_'+os.path.basename(args.inputList))
@@ -222,15 +229,15 @@ def run(args):
     for tilename in tilenames:
         t1 = time.time()
         Ntile = Ntile + 1
-        sout.write("# ----------------------------------------------------\n")
-        sout.write(f"# Doing: {tilename} [{Ntile}/{len(tilenames)}]\n")
-        sout.write("# ----------------------------------------------------\n")
+        logger.info("----------------------------------------------------")
+        logger.info(f"Doing: {tilename} [{Ntile}/{len(tilenames)}]")
+        logger.info("----------------------------------------------------")
 
         # 1. Get all of the filenames for a given tilename
         filenames = fitsfinder.get_coaddfiles_tilename(tilename, dbh, bands=args.bands)
 
         if filenames is False:
-            sout.write(f"# Skipping: {tilename} -- not in TABLE \n")
+            logger.info(f"Skipping: {tilename} -- not in TABLE")
             continue
 
         indx = indices[tilename]
@@ -250,13 +257,12 @@ def run(args):
 
             # Write them to a file
             f_used.write(filename+"\n")
-
+            counter = f"{k+1}/{n_filenames} files"
             ar = (filename, ra[indx], dec[indx])
             kw = {'xsize': xsize[indx], 'ysize': ysize[indx],
                   'units': 'arcmin', 'prefix': args.prefix, 'outdir': args.outdir,
-                  'tilename': tilename, 'verb': args.verb}
-            if args.verb:
-                sout.write(f"# Cutting: {filename}\n")
+                  'tilename': tilename, 'counter': counter}
+            logger.info(f"Cutting: {filename}")
             if args.MP:
                 NP = len(avail_bands)
                 p[filename] = mp.Process(target=thumbslib.fitscutter, args=ar, kwargs=kw)
@@ -276,12 +282,10 @@ def run(args):
                                    prefix=args.prefix,
                                    colorset=args.colorset,
                                    outdir=args.outdir,
-                                   verb=args.verb,
                                    stiff_parameters={'NTHREADS': NP})
 
-        if args.verb:
-            sout.write(f"# Time {tilename}: {thumbslib.elapsed_time(t1)}\n")
+        logger.info(f"Time {tilename}: {thumbslib.elapsed_time(t1)}")
 
     f_used.close()
-    sout.write(f"\n*** Grand Total time:{thumbslib.elapsed_time(t0)} ***\n")
+    logger.info(f"Grand Total time:{thumbslib.elapsed_time(t0)}")
     return
