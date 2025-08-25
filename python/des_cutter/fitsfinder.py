@@ -5,15 +5,16 @@ import os
 import pandas
 import warnings
 import logging
-
+import datetime
 warnings.filterwarnings("ignore", category=UserWarning, message=".*pandas only supports SQLAlchemy.*")
 
 # Logger
 LOGGER = logging.getLogger(__name__)
 logger = LOGGER
 
-XSIZE_DEFAULT = 10.0
-YSIZE_DEFAULT = 10.0
+# Default xsize, ysize in arcmin
+XSIZE_DEFAULT = 1.0
+YSIZE_DEFAULT = 1.0
 
 
 def check_columns(cols, req_cols):
@@ -22,6 +23,29 @@ def check_columns(cols, req_cols):
         if c not in cols:
             raise TypeError(f'column {c} in file')
     return
+
+
+def check_xy(df, xsize=None, ysize=None):
+    """
+    Check if xsize/ysize are set from command-line or read from input CSV.
+    """
+    nobj = len(df)
+    if xsize:
+        xsize = numpy.array([xsize]*nobj)
+    else:
+        try:
+            xsize = df.XSIZE.values
+        except ValueError:
+            xsize = numpy.array([XSIZE_DEFAULT]*nobj)
+
+    if ysize:
+        ysize = numpy.array([ysize]*nobj)
+    else:
+        try:
+            ysize = df.YSIZE.values
+        except ValueError:
+            ysize = numpy.array([YSIZE_DEFAULT]*nobj)
+    return xsize, ysize
 
 
 def check_xysize(df, args, nobj):
@@ -157,6 +181,7 @@ def find_finalcut_images(ra, dec, dbh, bands=None, date_start=None, date_end=Non
     for k, (ra_val, dec_val) in enumerate(zip(ra, dec)):
         # Get the formatted query for ra, dec, dates and bands
         query = get_query_finalcut(ra_val, dec_val, bands=bands, date_start=date_start, date_end=date_end)
+        LOGGER.debug(f"Will run query:\n{query}\n")
         # Load into a pandas df
         df = pandas.read_sql(query, con=dbh)
         if 'COMPRESSION' in df.columns:
@@ -188,7 +213,8 @@ def get_query_finalcut(ra, dec, bands=None, date_start=None, date_end=None):
         and_bands = f"and BAND IN ({in_bands})"
 
     # DATE formatting
-    if isinstance(date_start, str) and isinstance(date_end, str):
+    if (isinstance(date_start, str) and isinstance(date_end, str)) \
+       or (isinstance(date_start, datetime.date) and isinstance(date_end, datetime.date)):
         and_dates = f"and DATE_OBS BETWEEN '{date_start}' AND '{date_end}'"
     else:
         and_dates = ''

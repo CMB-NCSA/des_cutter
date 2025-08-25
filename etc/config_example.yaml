@@ -1,0 +1,7 @@
+# Configuration file example
+outdir: /home/felipe/new_test
+dbname: /data/des/dblib/des_metadata.duckdb
+date_start: 2013-10-25
+date_end: 2013-12-31
+np: 0
+MP: True

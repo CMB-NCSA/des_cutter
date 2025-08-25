@@ -8,16 +8,31 @@ import pandas
 import duckdb
 import des_cutter
 import logging
+import yaml
+import datetime
+import des_cutter.regexlib as regexlib
 from des_cutter import fitsfinder
 from des_cutter import thumbslib
 
-XSIZE_DEFAULT = 1.0
-YSIZE_DEFAULT = 1.0
-
 
 def cmdline():
+
+    # 1. Make a proto-parse use to read in the default yaml configuration
+    # file, Turn off help, so we print all options in response to -h
+    conf_parser = argparse.ArgumentParser(add_help=False)
+    conf_parser.add_argument("-c", "--configfile", help="HeaderService config file")
+    args, remaining_argv = conf_parser.parse_known_args()
+    # If we have -c or --config, then we proceed to read it
+    if args.configfile:
+        conf_defaults = yaml.safe_load(open(args.configfile))
+    else:
+        conf_defaults = {}
+
+    # 2. This is the main parser
     parser = argparse.ArgumentParser(description="Retrieves FITS fits within DES and creates thumbnails for a list \
-                                                  of sky positions")
+                                                  of sky positions",
+                                     # Inherit options from config_parser
+                                     parents=[conf_parser])
     # The positional arguments
     parser.add_argument("inputList", help="Input CSV file with positions (RA,DEC)"
                         "and optional (XSIZE,YSIZE) in arcmins")
@@ -48,8 +63,6 @@ def cmdline():
                         help="Run using multi-process, 0=automatic, 1=single-process [default]")
     parser.add_argument("--outdir", type=str, action='store', default=os.getcwd(),
                         help="Output directory location [default='./']")
-    parser.add_argument("--logfile", type=str, action='store', default=None,
-                        help="Output logfile")
 
     # Logging options (loglevel/log_format/log_format_date)
     if 'LOG_LEVEL' in os.environ:
@@ -58,6 +71,7 @@ def cmdline():
         default_log_level = 'INFO'
     default_log_format = '[%(asctime)s.%(msecs)03d][%(levelname)s][%(name)s][%(funcName)s] %(message)s'
     default_log_format_date = '%Y-%m-%d %H:%M:%S'
+    default_log = "des_cutter_{}.log".format(datetime.datetime.now().strftime("%Y-%m-%d-%H%M%S"))
     parser.add_argument("--loglevel", action="store", default=default_log_level, type=str.upper,
                         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
                         help="Logging Level [DEBUG/INFO/WARNING/ERROR/CRITICAL]")
@@ -65,18 +79,46 @@ def cmdline():
                         help="Format for logging")
     parser.add_argument("--log_format_date", action="store", type=str, default=default_log_format_date,
                         help="Format for date section of logging")
-
-    args = parser.parse_args()
-
+    parser.add_argument("--logfile", action="store", type=str, default=None,
+                        help="Logfile where to send logging information")
+    # args = parser.parse_args()
+    # Set the defaults of argparse using the values in the yaml config file
+    parser.set_defaults(**conf_defaults)
+    args = parser.parse_args(args=remaining_argv)
+    # Update  variables in config with actual values
+    args.__dict__ = regexlib.replace_variables_in_dict(args.__dict__)
+    args.loglevel = getattr(logging, args.loglevel)
     # Make sure that both date_start/end are defined or both are None
     if args.date_start is None and args.date_end is None:
         pass
     elif isinstance(args.date_start, str) and isinstance(args.date_end, str):
         pass
+    elif isinstance(args.date_start, datetime.date) and isinstance(args.date_end, datetime.date):
+        pass
     else:
         raise ValueError('Both --date_start and --date_end must be defined')
 
+    # Set default logfile in case is not defined
+    if args.logfile is None:
+        args.logfile = os.path.join(args.outdir, default_log)
+
     return args
+
+
+def check_inputlist(inputList):
+
+    # Read in CSV file with pandas
+    df = pandas.read_csv(inputList)
+    ra = df.RA.values  # if you only want the values otherwise use df.RA
+    dec = df.DEC.values
+    req_cols = ['RA', 'DEC']
+
+    # Check columns for consistency
+    fitsfinder.check_columns(df.columns, req_cols)
+
+    # Check the xsize and ysizes
+    xsize, ysize = fitsfinder.check_xy(df)
+    return ra, dec, xsize, ysize, df
 
 
 def prepare(args):
@@ -91,6 +133,7 @@ def prepare(args):
     # Create logger
     logger = logging.getLogger(__name__)
     thumbslib.create_logger(logger, level=args.loglevel, MP=MP,
+                            logfile=args.logfile,
                             log_format=args.log_format,
                             log_format_date=args.log_format_date)
 
@@ -103,6 +146,7 @@ def prepare(args):
 def run_finalcut(args):
 
     logger = logging.getLogger(__name__)
+    t0 = time.time()
 
     # Get the number of processors to use
     NP = thumbslib.get_NP(args.np)
@@ -178,24 +222,17 @@ def run_finalcut(args):
         p.terminate()
         del p
 
+    logger.info(f"Grand Total FINALCUT time:{thumbslib.elapsed_time(t0)}")
 
-def run(args):
+
+def run_coadd(args):
 
     # Get the logger
     logger = logging.getLogger(__name__)
 
-    # Read in CSV file with pandas
-    df = pandas.read_csv(args.inputList)
-    ra = df.RA.values  # if you only want the values otherwise use df.RA
-    dec = df.DEC.values
-    nobj = len(ra)
-    req_cols = ['RA', 'DEC']
+    # Check input list for consistency
+    ra, dec, xsize, ysize, df = check_inputlist(args.inputList)
 
-    # Check columns for consistency
-    fitsfinder.check_columns(df.columns, req_cols)
-
-    # Check the xsize and ysizes
-    xsize, ysize = fitsfinder.check_xysize(df, args, nobj)
     # connect to the DuckDB database -- via filename
     dbh = duckdb.connect(args.dbname, read_only=True)
 

@@ -11,7 +11,7 @@ if __name__ == "__main__":
     # Run the maker
     try:
         des_cutter.makeDESthumbslib.prepare(args)
-        des_cutter.makeDESthumbslib.run(args)
+        des_cutter.makeDESthumbslib.run_coadd(args)
         des_cutter.makeDESthumbslib.run_finalcut(args)
     except Exception:
         LOGGER = logging.getLogger(__name__)
