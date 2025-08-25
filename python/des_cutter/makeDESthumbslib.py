@@ -36,6 +36,11 @@ def cmdline():
     # The positional arguments
     parser.add_argument("inputList", help="Input CSV file with positions (RA,DEC)"
                         "and optional (XSIZE,YSIZE) in arcmins")
+    # Coadd and finalcut
+    parser.add_argument("--coadd", action="store_true", default=False,
+                        help="Run coadd cutouts")
+    parser.add_argument("--finalcut", action="store_true", default=False,
+                        help="Run finalcut cutouts")
     # The optional arguments for image retrieval
     parser.add_argument("--xsize", type=float, action="store", default=None,
                         help="Length of x-side in arcmins of image [default = 1]")
@@ -57,8 +62,6 @@ def cmdline():
     parser.add_argument("--colorset", type=str, action='store', nargs='+', default=['i', 'r', 'g'],
                         help="Color Set to use for creation of color image [default=i r g]")
     # Use multiprocessing
-    parser.add_argument("--MP", action='store_true', default=False,
-                        help="Run in multiple core [default=False]")
     parser.add_argument("--np", action="store", default=1, type=int,
                         help="Run using multi-process, 0=automatic, 1=single-process [default]")
     parser.add_argument("--outdir", type=str, action='store', default=os.getcwd(),
@@ -102,6 +105,14 @@ def cmdline():
     if args.logfile is None:
         args.logfile = os.path.join(args.outdir, default_log)
 
+    # Logic for MP and NP
+    # Get the number of processors to use
+    args.NP = thumbslib.get_NP(args.np)
+    if args.NP > 1 or args.MP:
+        args.MP = True
+    else:
+        args.MP = False
+
     return args
 
 
@@ -112,10 +123,8 @@ def check_inputlist(inputList):
     ra = df.RA.values  # if you only want the values otherwise use df.RA
     dec = df.DEC.values
     req_cols = ['RA', 'DEC']
-
     # Check columns for consistency
     fitsfinder.check_columns(df.columns, req_cols)
-
     # Check the xsize and ysizes
     xsize, ysize = fitsfinder.check_xy(df)
     return ra, dec, xsize, ysize, df
@@ -123,24 +132,26 @@ def check_inputlist(inputList):
 
 def prepare(args):
 
-    # Get the number of processors to use
-    NP = thumbslib.get_NP(args.np)
-    if NP > 1 or args.MP:
-        MP = True
-    else:
-        MP = False
-
     # Create logger
     logger = logging.getLogger(__name__)
-    thumbslib.create_logger(logger, level=args.loglevel, MP=MP,
+
+    # Make sure that outdir exists
+    if not os.path.exists(args.outdir):
+        msg = f"Creating outdir: {args.outdir}"
+        os.makedirs(args.outdir)
+    else:
+        msg = None
+
+    thumbslib.create_logger(logger, level=args.loglevel, MP=args.MP,
                             logfile=args.logfile,
                             log_format=args.log_format,
                             log_format_date=args.log_format_date)
-
     logger.info(f"Received command call:\n{' '.join(sys.argv[0:-1])}")
     logger.info(f"Running spt3g_cutter:{des_cutter.__version__}")
     logger.info(f"Running with args: \n{args}")
-    return logger
+    if msg:
+        logger.info(msg)
+    return
 
 
 def run_finalcut(args):
@@ -148,41 +159,20 @@ def run_finalcut(args):
     logger = logging.getLogger(__name__)
     t0 = time.time()
 
-    # Get the number of processors to use
-    NP = thumbslib.get_NP(args.np)
-    if NP > 1:
-        p = mp.Pool(processes=NP)
-        logger.info(f"Will use {NP} processors for process")
-        manager = mp.Manager()
-        cutout_dict = manager.dict()
-        rejected_dict = manager.dict()
-        results = []
-    else:
-        cutout_dict = None
-        rejected_dict = None
+    # Check input list for consistency
+    ra, dec, xsize, ysize, df = check_inputlist(args.inputList)
 
-    # Read in CSV file with pandas
-    df = pandas.read_csv(args.inputList)
-    ra = df.RA.values  # if you only want the values otherwise use df.RA
-    dec = df.DEC.values
-    nobj = len(ra)
-    req_cols = ['RA', 'DEC']
-
-    # Check columns for consistency
-    fitsfinder.check_columns(df.columns, req_cols)
-
-    # Check the xsize and ysizes
-    xsize, ysize = fitsfinder.check_xysize(df, args, nobj)
     # connect to the DuckDB database -- via filename
     dbh = duckdb.connect(args.dbname, read_only=True)
 
     # Get archive_root
     archive_root = fitsfinder.get_archive_root()
 
-    # Make sure that outdir exists
-    if not os.path.exists(args.outdir):
-        logger.info(f"Creating: {args.outdir}")
-        os.makedirs(args.outdir)
+    # Get the number of processors to use
+    if args.NP > 1:
+        p = mp.Pool(processes=args.NP)
+        logger.info(f"Will use {args.NP} processors for FINALCUT process")
+        results = []
 
     # Find all of the tilenames, indices grouped per tile
     logger.info("Finding FINALCUT images for each input (ra, dec) position")
@@ -191,6 +181,9 @@ def run_finalcut(args):
                                                 date_start=args.date_start,
                                                 date_end=args.date_end,
                                                 bands=args.bands)
+    # Close the DB connection
+    dbh.close()
+
     # Loop over all ra, dec postions and results.
     for i, (ra_val, dec_val) in enumerate(zip(ra, dec)):
         df = df_images[i]
@@ -204,7 +197,7 @@ def run_finalcut(args):
                   'units': 'arcmin', 'prefix': args.prefix,
                   'outdir': args.outdir, 'counter': counter}
 
-            if NP > 1:
+            if args.NP > 1:
                 # Get result to catch exceptions later, after close()
                 s = p.apply_async(thumbslib.fitscutter, args=ar, kwds=kw)
                 results.append(s)
@@ -213,7 +206,7 @@ def run_finalcut(args):
                 thumbslib.fitscutter(*ar, **kw)
 
     # Close/join mp processes
-    if NP > 1:
+    if args.NP > 1:
         p.close()
         # Check for exceptions
         for r in results:
@@ -223,6 +216,19 @@ def run_finalcut(args):
         del p
 
     logger.info(f"Grand Total FINALCUT time:{thumbslib.elapsed_time(t0)}")
+
+
+def run(args):
+
+    t0 = time.time()
+    # Get the logger
+    logger = logging.getLogger(__name__)
+    prepare(args)
+    if args.coadd:
+        run_coadd(args)
+    if args.finalcut:
+        run_finalcut(args)
+    logger.info(f"FINAL time:{thumbslib.elapsed_time(t0)}")
 
 
 def run_coadd(args):
@@ -238,11 +244,6 @@ def run_coadd(args):
 
     # Get archive_root
     archive_root = fitsfinder.get_archive_root()
-
-    # Make sure that outdir exists
-    if not os.path.exists(args.outdir):
-        logger.info(f"Creating: {args.outdir}")
-        os.makedirs(args.outdir)
 
     # Find all of the tilenames, indices grouped per tile
     logger.info("Finding tilename for each input position")
@@ -278,8 +279,12 @@ def run_coadd(args):
             continue
 
         indx = indices[tilename]
-
         avail_bands = filenames.BAND
+        if args.NP > 1:
+            NP = min(len(avail_bands), args.NP)
+        else:
+            NP = 1
+        logger.info(f"Will use {NP} processors for COADD processing")
 
         # 2. Loop over all of the filename -- We could use multi-processing
         p = {}
@@ -300,16 +305,14 @@ def run_coadd(args):
                   'units': 'arcmin', 'prefix': args.prefix, 'outdir': args.outdir,
                   'tilename': tilename, 'counter': counter}
             logger.info(f"Cutting: {filename}")
-            if args.MP:
-                NP = len(avail_bands)
+            if NP > 1:
                 p[filename] = mp.Process(target=thumbslib.fitscutter, args=ar, kwargs=kw)
                 p[filename].start()
             else:
-                NP = 1
                 thumbslib.fitscutter(*ar, **kw)
 
         # Make sure all process are closed before proceeding
-        if args.MP:
+        if NP > 1:
             for filename, value in p.items():
                 value.join()
 
@@ -323,6 +326,8 @@ def run_coadd(args):
 
         logger.info(f"Time {tilename}: {thumbslib.elapsed_time(t1)}")
 
+    # Close the DB connection
+    dbh.close()
     f_used.close()
     logger.info(f"Grand Total time:{thumbslib.elapsed_time(t0)}")
     return

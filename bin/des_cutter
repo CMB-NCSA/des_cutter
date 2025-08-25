@@ -10,9 +10,7 @@ if __name__ == "__main__":
     args = des_cutter.makeDESthumbslib.cmdline()
     # Run the maker
     try:
-        des_cutter.makeDESthumbslib.prepare(args)
-        des_cutter.makeDESthumbslib.run_coadd(args)
-        des_cutter.makeDESthumbslib.run_finalcut(args)
+        des_cutter.makeDESthumbslib.run(args)
     except Exception:
         LOGGER = logging.getLogger(__name__)
         (type, value, my_traceback) = sys.exc_info()
