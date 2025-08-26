@@ -192,11 +192,11 @@ def find_finalcut_images(ra, dec, dbh, bands=None, date_start=None, date_end=Non
     return results
 
 
-def get_query_finalcut(ra, dec, bands=None, date_start=None, date_end=None):
+def get_query_finalcut(ra, dec, tag='Y6A2', bands=None, date_start=None, date_end=None):
 
     query_FINALCUTFILES = """
     select FILENAME, COMPRESSION, PATH, BAND, EXPTIME, NITE, EXPNUM, DATE_OBS, MJD_OBS
-    from Y6A2_FINALCUT_FILEPATH
+    from {TAG}_FINALCUT_IMAGE_FILEPATH
       where
       ((CROSSRA0='N' AND ({RA} BETWEEN RACMIN and RACMAX) AND ({DEC} BETWEEN DECCMIN and DECCMAX)) OR
        (CROSSRA0='Y' AND ({RA} BETWEEN RACMIN-360 and RACMAX) AND ({DEC} BETWEEN DECCMIN and DECCMAX)))
@@ -222,12 +222,13 @@ def get_query_finalcut(ra, dec, bands=None, date_start=None, date_end=None):
     query = query_FINALCUTFILES.format(
         RA=ra,
         DEC=dec,
+        TAG=tag,
         and_bands=and_bands,
         and_dates=and_dates)
     return query
 
 
-def get_coaddfiles_tilename(tilename, dbh, bands='all'):
+def get_coaddfiles_tilename(tilename, dbh, tag='Y6A2', bands='all'):
     """
     Build the query and get the coadd files for a TILENAME
     Replace to pandas dataframe
@@ -241,12 +242,12 @@ def get_coaddfiles_tilename(tilename, dbh, bands='all'):
 
     QUERY_COADDFILES = """
     select FILENAME, TILENAME, BAND, FILETYPE, PATH, COMPRESSION
-     from Y6A2_COADD_FILEPATH
+     from {TAG}_COADD_IMAGE_FILEPATH
             where
               FILETYPE='coadd' and
               {and_BANDS} TILENAME='{TILENAME}'"""
 
-    query = QUERY_COADDFILES.format(TILENAME=tilename, and_BANDS=and_bands)
+    query = QUERY_COADDFILES.format(TILENAME=tilename, and_BANDS=and_bands, TAG=tag)
     LOGGER.info(f"Running query: {query}")
     rec = query2rec(query, dbh)
     # Return a record array with the query

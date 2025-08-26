@@ -95,18 +95,21 @@ query["DR3_FINALCUT_CATALOG_FILEPATH"] = """
 select c.FILENAME, f.PATH, c.FILETYPE, c.BAND, c.CCDNUM, c.PFW_ATTEMPT_ID
  from CATALOG c, FILE_ARCHIVE_INFO f, PROCTAG p
   where p.TAG = 'DR3_FINALCUT'
+    and p.pfw_attempt_id = c.pfw_attempt_id
     and f.FILENAME=c.FILENAME
     and c.FILETYPE='cat_finalcut'"""
 
-# We want to do only some tables at a time
-tables = ["DR3_FINALCUT_IMAGE_FILEPATH", "DR3_FINALCUT_CATALOG_FILEPATH"]
 
+# The longer way...
+tables = query.keys()
 for parquet_name in tables:
+    t0 = time.time()
     q = query[parquet_name]
     print(f"-- Will run query: {q}\n")
-    t0 = time.time()
     df = pd.read_sql(q, dbh)
     print(f"-- Done with query in {elapsed_time(t0)}[s]")
+    if 'PATH' in df.columns:
+        df['PATH'] = df['PATH'].str.replace('DEC_Taiga/', 'DEC/', regex=False)
     df.to_parquet(f"{parquet_name}.parquet", engine="pyarrow", compression="snappy", index=True)
 
 con = duckdb.connect("decade_metadata.duckdb")
@@ -117,4 +120,34 @@ for parquet_name in tables:
     print(f"Wrote DuckDB table: {parquet_name} in {elapsed_time(t0)}[s]")
 
 con.execute("VACUUM")  # Ensure data is written
+con.close()
+exit()
+
+# We want to do only some tables at a time
+# tables = query.keys()
+tables = ["DR3_FINALCUT_IMAGE_FILEPATH", "DR3_FINALCUT_CATALOG_FILEPATH",
+          "DR3_COADD_IMAGE_FILEPATH", "DR3_COADD_CATALOG_FILEPATH"]
+# tables = ["DR3_FINALCUT_CATALOG_FILEPATH"]
+# tables = ["DR3_FINALCUT_IMAGE_FILEPATH"]
+
+# In case we want to do this from existing parquet tables
+con = duckdb.connect('decade_metadata.duckdb')
+for parquet_name in tables:
+    t0 = time.time()
+    print(f"-- Will load parquet table: {parquet_name}")
+    df = pd.read_parquet(f"{parquet_name}.parquet")
+    print(f"-- Done loading in: {elapsed_time(t0)}[s]")
+    if 'PATH' in df.columns:
+        df['PATH'] = df['PATH'].str.replace('DEC_Taiga/', 'DEC/', regex=False)
+        df['PATH'] = df['PATH'].str.replace('OPS_Taiga/', '', regex=False)
+
+    con.register('df_view', df)
+    t1 = time.time()
+    q = f"CREATE OR REPLACE TABLE {parquet_name} AS SELECT * FROM df_view"
+    print(f"-- Will run: \n{q}\n")
+    con.execute(q)
+    con.unregister('df_view')
+    print(f"-- Done inserting in: {elapsed_time(t1)}[s]")
+    print(f"-- Total time {parquet_name}: {elapsed_time(t0)}[s]")
+
 con.close()

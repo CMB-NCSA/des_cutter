@@ -7,3 +7,4 @@ np: 0
 bands: [g, r, i, z]
 coadd: True
 finalcut: True
+TAG: Y6A2

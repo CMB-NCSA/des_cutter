@@ -29,7 +29,7 @@ def cmdline():
         conf_defaults = {}
 
     # 2. This is the main parser
-    parser = argparse.ArgumentParser(description="Retrieves FITS fits within DES and creates thumbnails for a list \
+    parser = argparse.ArgumentParser(description="Retrieves FITS fits within DES/DECADE and creates thumbnails for a list \
                                                   of sky positions",
                                      # Inherit options from config_parser
                                      parents=[conf_parser])
@@ -272,7 +272,7 @@ def run_coadd(args):
         logger.info("----------------------------------------------------")
 
         # 1. Get all of the filenames for a given tilename
-        filenames = fitsfinder.get_coaddfiles_tilename(tilename, dbh, bands=args.bands)
+        filenames = fitsfinder.get_coaddfiles_tilename(tilename, dbh, tag=args.tag, bands=args.bands)
 
         if filenames is False:
             logger.info(f"Skipping: {tilename} -- not in TABLE")

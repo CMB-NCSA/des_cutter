@@ -34,15 +34,15 @@ select i.FILENAME, f.PATH, f.COMPRESSION, i.BAND, i.EXPTIME, i.AIRMASS, i.FWHM, 
    and p.pfw_attempt_id = i.pfw_attempt_id
    and i.EXPNUM=e.EXPNUM
    and i.FILENAME=f.FILENAME
-   and i.FILETYPE='red_immask';
+   and i.FILETYPE='red_immask' and ROWNUM < 10000;
 
 -- FINALCUT CATALOGS
 select c.FILENAME, f.PATH, c.FILETYPE, c.BAND, c.CCDNUM, c.PFW_ATTEMPT_ID
  from CATALOG c, FILE_ARCHIVE_INFO f, PROCTAG p
   where p.TAG = 'DR3_FINALCUT'
-    and p.pfw_attempt_id = i.pfw_attempt_id
+    and p.pfw_attempt_id = c.pfw_attempt_id
     and f.FILENAME=c.FILENAME
-    and c.FILETYPE='cat_finalcut';
+    and c.FILETYPE='cat_finalcut' and ROWNUM < 100;
 
 
 select i.FILENAME, i.EXPNUM, i.CCDNUM, i.BAND, i.PFW_ATTEMPT_ID, p.TAG
