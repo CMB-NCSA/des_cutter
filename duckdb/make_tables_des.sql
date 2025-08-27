@@ -2,18 +2,20 @@
 
 --- Creation of table on dessci for Y6A2_FINALCUT_FILEPATH
 --- build table with info for finalcut files
--- DROP TABLE felipe.Y6A2_FINALCUT_FILEPATH;
-create table Y6A2_FINALCUT_FILEPATH as
+-- DROP TABLE felipe.Y6A2_FINALCUT_IMAGE_FILEPATH;
+create table Y6A2_FINALCUT_IMAGE_FILEPATH as
 select i.FILENAME, f.PATH, f.COMPRESSION, i.BAND, i.EXPTIME, i.AIRMASS, i.FWHM, i.NITE, i.EXPNUM, i.CCDNUM, i.PFW_ATTEMPT_ID,
        e.DATE_OBS, e.MJD_OBS,
+       z.MAG_ZERO, z.SIGMA_MAG_ZERO,
        i.CROSSRA0, i.RACMIN, i.RACMAX, i.DECCMIN, i.DECCMAX,
        i.RA_CENT, i.DEC_CENT,
        i.RAC1, i.RAC2, i.RAC3, i.RAC4, i.DECC1, i.DECC2, i.DECC3, i.DECC4,
        (case when i.CROSSRA0='Y' THEN abs(i.RACMAX - (i.RACMIN-360)) ELSE abs(i.RACMAX - i.RACMIN) END) as RA_SIZE,
        abs(i.DECCMAX - i.DECCMIN) as DEC_SIZE
- from Y6A2_IMAGE i, Y6A2_EXPOSURE e, Y6A2_FILE_ARCHIVE_INFO f
+ from Y6A2_IMAGE i, Y6A2_EXPOSURE e, Y6A2_FILE_ARCHIVE_INFO f, des_admin.Y6A2_ZEROPOINT z
  where  i.EXPNUM=e.EXPNUM
         and i.FILENAME=f.FILENAME
+        and i.FILENAME=z.IMAGENAME
         and i.FILETYPE='red_immask';
 
 -- SELECT COUNT(*) FROM Y6A2_FINALCUT_FILEPATH;
@@ -21,7 +23,7 @@ select i.FILENAME, f.PATH, f.COMPRESSION, i.BAND, i.EXPTIME, i.AIRMASS, i.FWHM, 
 
 -- drop table felipe.Y6A2_FINALCUT_CATALOG_FILEPATH
 create table Y6A2_FINALCUT_CATALOG_FILEPATH as
-select c.FILENAME, f.PATH, c.FILETYPE, c.BAND, c.CCDNUM, c.PFW_ATTEMPT_ID
+select c.FILENAME, f.PATH, c.FILETYPE, c.BAND, c.CCDNUM
  from des_admin.Y6A2_CATALOG c, des_admin.Y6A2_FILE_ARCHIVE_INFO f
   where f.FILENAME=c.FILENAME
     and c.FILETYPE='cat_finalcut';

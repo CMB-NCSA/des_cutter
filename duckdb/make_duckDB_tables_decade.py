@@ -75,24 +75,35 @@ select c.FILENAME, c.TILENAME, c.BAND, c.FILETYPE, f.PATH
      and c.FILETYPE='coadd_cat'
      and p.PFW_ATTEMPT_ID = c.PFW_ATTEMPT_ID"""
 
+query["DR3_COADD_TIFF_FILEPATH"] = """
+select m.FILENAME, f.PATH, m.TILENAME
+  from MISCFILE m, FILE_ARCHIVE_INFO f, PROCTAG p
+   where p.TAG = 'DR3_COADD'
+   and m.FILETYPE='coadd_tiff'
+   and p.PFW_ATTEMPT_ID = m.PFW_ATTEMPT_ID
+   and m.FILENAME = f.FILENAME"""
+
 query["DR3_FINALCUT_IMAGE_FILEPATH"] = """
 select i.FILENAME, f.PATH, f.COMPRESSION, i.BAND, i.EXPTIME, i.AIRMASS,
-       i.FWHM, i.NITE, i.EXPNUM, i.CCDNUM, i.PFW_ATTEMPT_ID,
+       i.FWHM, i.NITE, i.EXPNUM, i.CCDNUM,
        e.DATE_OBS, e.MJD_OBS,
+       z.MAG_ZERO, z.SIGMA_MAG_ZERO,
        i.CROSSRA0, i.RACMIN, i.RACMAX, i.DECCMIN, i.DECCMAX,
        i.RA_CENT, i.DEC_CENT,
        i.RAC1, i.RAC2, i.RAC3, i.RAC4, i.DECC1, i.DECC2, i.DECC3, i.DECC4,
        (case when i.CROSSRA0='Y' THEN abs(i.RACMAX - (i.RACMIN-360)) ELSE abs(i.RACMAX - i.RACMIN) END) as RA_SIZE,
        abs(i.DECCMAX - i.DECCMIN) as DEC_SIZE
- from IMAGE i, EXPOSURE e, FILE_ARCHIVE_INFO f, PROCTAG p
+ from IMAGE i, EXPOSURE e, FILE_ARCHIVE_INFO f, PROCTAG p, ZEROPOINT z
   where p.TAG = 'DR3_FINALCUT'
    and p.pfw_attempt_id = i.pfw_attempt_id
    and i.EXPNUM=e.EXPNUM
    and i.FILENAME=f.FILENAME
-   and i.FILETYPE='red_immask'"""
+   and i.FILETYPE='red_immask'
+   and i.FILENAME=z.IMAGENAME
+   """
 
 query["DR3_FINALCUT_CATALOG_FILEPATH"] = """
-select c.FILENAME, f.PATH, c.FILETYPE, c.BAND, c.CCDNUM, c.PFW_ATTEMPT_ID
+select c.FILENAME, f.PATH, c.FILETYPE, c.BAND, c.CCDNUM
  from CATALOG c, FILE_ARCHIVE_INFO f, PROCTAG p
   where p.TAG = 'DR3_FINALCUT'
     and p.pfw_attempt_id = c.pfw_attempt_id
@@ -100,8 +111,10 @@ select c.FILENAME, f.PATH, c.FILETYPE, c.BAND, c.CCDNUM, c.PFW_ATTEMPT_ID
     and c.FILETYPE='cat_finalcut'"""
 
 
-# The longer way...
+# The longer way, queries + parquet at the same time
 tables = query.keys()
+tables = ['DR3_COADD_TIFF_FILEPATH']
+tables = ['DR3_FINALCUT_IMAGE_FILEPATH']
 for parquet_name in tables:
     t0 = time.time()
     q = query[parquet_name]

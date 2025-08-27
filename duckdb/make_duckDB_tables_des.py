@@ -65,12 +65,11 @@ oracle2parquet_names = {
 # Loop over all tables and create .parquet files for each one
 for oracle_name, parquet_name in oracle2parquet_names.items():
     t0 = time.time()
+    print(f"Reading table {oracle_name}")
     query = f"SELECT * FROM {oracle_name}"
     df = pd.read_sql(query, dbh)
-    print("Done reading table")
     if 'PATH' in df.columns:
         df['PATH'] = df['PATH'].str.replace('OPS_Taiga/', '', regex=False)
-
     df.to_parquet(f"{parquet_name}.parquet", engine="pyarrow", compression="snappy", index=True)
     print(f"Done: {parquet_name} in {elapsed_time(t0)}[s]")
 
@@ -79,6 +78,7 @@ for oracle_name, parquet_name in oracle2parquet_names.items():
 con = duckdb.connect("des_metadata.duckdb")
 for oracle_name, parquet_name in oracle2parquet_names.items():
     t0 = time.time()
+    print(f"Crating DuckDB table: {parquet_name}")
     query = f"CREATE TABLE {parquet_name} AS SELECT * FROM '{parquet_name}.parquet'"
     con.execute(query)
     print(f"Wrote DuckDB table: {parquet_name} in {elapsed_time(t0)}[s]")
