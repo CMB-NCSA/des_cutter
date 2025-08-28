@@ -1,19 +1,19 @@
-import collections
 import socket
 import numpy
 import os
 import pandas
 import warnings
 import logging
-
+import datetime
 warnings.filterwarnings("ignore", category=UserWarning, message=".*pandas only supports SQLAlchemy.*")
 
 # Logger
 LOGGER = logging.getLogger(__name__)
 logger = LOGGER
 
-XSIZE_DEFAULT = 10.0
-YSIZE_DEFAULT = 10.0
+# Default xsize, ysize in arcmin
+XSIZE_DEFAULT = 1.0
+YSIZE_DEFAULT = 1.0
 
 
 def check_columns(cols, req_cols):
@@ -22,6 +22,29 @@ def check_columns(cols, req_cols):
         if c not in cols:
             raise TypeError(f'column {c} in file')
     return
+
+
+def check_xy(df, xsize=None, ysize=None):
+    """
+    Check if xsize/ysize are set from command-line or read from input CSV.
+    """
+    nobj = len(df)
+    if xsize:
+        xsize = numpy.array([xsize]*nobj)
+    else:
+        try:
+            xsize = df.XSIZE.values
+        except ValueError:
+            xsize = numpy.array([XSIZE_DEFAULT]*nobj)
+
+    if ysize:
+        ysize = numpy.array([ysize]*nobj)
+    else:
+        try:
+            ysize = df.YSIZE.values
+        except ValueError:
+            ysize = numpy.array([YSIZE_DEFAULT]*nobj)
+    return xsize, ysize
 
 
 def check_xysize(df, args, nobj):
@@ -46,53 +69,6 @@ def check_xysize(df, args, nobj):
     return xsize, ysize
 
 
-def query2dict_of_columns(query, con, array=False):
-    """
-    Transforms the result of an SQL query and a Database handle object [dhandle]
-    into a dictionary of list or numpy arrays if array=True
-    """
-    # Get the cursor from the DB handle
-    # cur = dbhandle.cursor()
-    # # Execute
-    result = con.execute(query)
-    # Get them all at once
-    list_of_tuples = result.fetchall()
-    # Get the description of the columns to make the dictionary
-    desc = [d[0] for d in result.description]
-
-    querydic = collections.OrderedDict()  # We will populate this one
-    cols = list(zip(*list_of_tuples))
-    for k, val in enumerate(cols):
-        key = desc[k]
-        if array:
-            if isinstance(val[0], str):
-                querydic[key] = numpy.array(val, dtype=object)
-            else:
-                querydic[key] = numpy.array(val)
-        else:
-            querydic[key] = cols[k]
-    return querydic
-
-
-def query2rec(query, dbhandle):
-    """
-    Queries DB and returns results as a numpy recarray.
-    """
-    # Get the cursor from the DB handle
-    cur = dbhandle.cursor()
-    # Execute
-    cur.execute(query)
-    tuples = cur.fetchall()
-
-    # Return rec array
-    if tuples:
-        names = [d[0] for d in cur.description]
-        return numpy.rec.array(tuples, names=names)
-    logger.error("# DB Query in query2rec() returned no results")
-    msg = f"# Error with query:{query}"
-    raise RuntimeError(msg)
-
-
 def find_tilename_radec(ra, dec, con, tag='Y6A2'):
     """
     Find the DES coadd tile name that contains the given RA and DEC position.
@@ -113,13 +89,12 @@ def find_tilename_radec(ra, dec, con, tag='Y6A2'):
     else:
         ra180 = ra
     query = QUERY_TILENAME_RADEC.format(RA=ra, DEC=dec, RA180=ra180, TAG=tag)
-    tilenames_dict = query2dict_of_columns(query, con, array=False)
-
-    if len(tilenames_dict) < 1:
+    tilenames_df = pandas.read_sql(query, con)
+    if len(tilenames_df) < 1:
         LOGGER.warning(f"No tile found at ra:{ra}, dec:{dec}\n")
         return False
     else:
-        return tilenames_dict['TILENAME'][0]
+        return tilenames_df['TILENAME'][0]
 
 
 def find_tilenames_radec(ra, dec, con, tag='Y6A2'):
@@ -157,6 +132,7 @@ def find_finalcut_images(ra, dec, dbh, bands=None, date_start=None, date_end=Non
     for k, (ra_val, dec_val) in enumerate(zip(ra, dec)):
         # Get the formatted query for ra, dec, dates and bands
         query = get_query_finalcut(ra_val, dec_val, bands=bands, date_start=date_start, date_end=date_end)
+        LOGGER.debug(f"Will run query:\n{query}\n")
         # Load into a pandas df
         df = pandas.read_sql(query, con=dbh)
         if 'COMPRESSION' in df.columns:
@@ -167,11 +143,11 @@ def find_finalcut_images(ra, dec, dbh, bands=None, date_start=None, date_end=Non
     return results
 
 
-def get_query_finalcut(ra, dec, bands=None, date_start=None, date_end=None):
+def get_query_finalcut(ra, dec, tag='Y6A2', bands=None, date_start=None, date_end=None):
 
     query_FINALCUTFILES = """
     select FILENAME, COMPRESSION, PATH, BAND, EXPTIME, NITE, EXPNUM, DATE_OBS, MJD_OBS
-    from Y6A2_FINALCUT_FILEPATH
+    from {TAG}_FINALCUT_IMAGE_FILEPATH
       where
       ((CROSSRA0='N' AND ({RA} BETWEEN RACMIN and RACMAX) AND ({DEC} BETWEEN DECCMIN and DECCMAX)) OR
        (CROSSRA0='Y' AND ({RA} BETWEEN RACMIN-360 and RACMAX) AND ({DEC} BETWEEN DECCMIN and DECCMAX)))
@@ -188,7 +164,8 @@ def get_query_finalcut(ra, dec, bands=None, date_start=None, date_end=None):
         and_bands = f"and BAND IN ({in_bands})"
 
     # DATE formatting
-    if isinstance(date_start, str) and isinstance(date_end, str):
+    if (isinstance(date_start, str) and isinstance(date_end, str)) \
+       or (isinstance(date_start, datetime.date) and isinstance(date_end, datetime.date)):
         and_dates = f"and DATE_OBS BETWEEN '{date_start}' AND '{date_end}'"
     else:
         and_dates = ''
@@ -196,12 +173,13 @@ def get_query_finalcut(ra, dec, bands=None, date_start=None, date_end=None):
     query = query_FINALCUTFILES.format(
         RA=ra,
         DEC=dec,
+        TAG=tag,
         and_bands=and_bands,
         and_dates=and_dates)
     return query
 
 
-def get_coaddfiles_tilename(tilename, dbh, bands='all'):
+def get_coaddfiles_tilename(tilename, dbh, tag='Y6A2', bands='all'):
     """
     Build the query and get the coadd files for a TILENAME
     Replace to pandas dataframe
@@ -215,33 +193,48 @@ def get_coaddfiles_tilename(tilename, dbh, bands='all'):
 
     QUERY_COADDFILES = """
     select FILENAME, TILENAME, BAND, FILETYPE, PATH, COMPRESSION
-     from Y6A2_COADD_FILEPATH
+     from {TAG}_COADD_IMAGE_FILEPATH
             where
               FILETYPE='coadd' and
               {and_BANDS} TILENAME='{TILENAME}'"""
 
-    query = QUERY_COADDFILES.format(TILENAME=tilename, and_BANDS=and_bands)
+    query = QUERY_COADDFILES.format(TILENAME=tilename, and_BANDS=and_bands, TAG=tag)
     LOGGER.info(f"Running query: {query}")
-    rec = query2rec(query, dbh)
-    # Return a record array with the query
-    return rec
+    rec = pandas.read_sql(query, dbh)
+    if len(rec) < 1:
+        LOGGER.warning(f"No coadd files found tilename: {tilename}")
+        return False
+    else:
+        return rec
 
 
-def get_archive_root():
+def get_archive_root(tag):
     """Function retreives the archive root"""
 
     if 'DES_ARCHIVE_ROOT' in os.environ:
-        archive_root = os.environ['DES_ARCHIVE_ROOT']
-    else:
-        # Try to auto-figure out from location
-        address = socket.getfqdn()
-        if address.find('cosmology.illinois.edu') >= 0:
-            archive_root = '/archive_data/desarchive/OPS_Taiga/'
-        elif address.find('spt3g') >= 0:
-            archive_root = '/des_archive/'
-        else:
-            logger.warning(f"archive_root undefined for: {address}")
-            archive_root = ''
+        des_archive_root = os.environ['DES_ARCHIVE_ROOT']
+        LOGGER.debug(f"Getting DES archive root: {des_archive_root}\n")
 
-    LOGGER.debug(f"Getting the archive root: {archive_root}\n")
-    return archive_root
+    if 'DECA_ARCHIVE_ROOT' in os.environ:
+        deca_archive_root = os.environ['DECA_ARCHIVE_ROOT']
+        LOGGER.debug(f"Getting DECA archive root: {deca_archive_root}\n")
+
+    # Try to auto-figure out from location
+    address = socket.getfqdn()
+    if address.find('cosmology.illinois.edu') >= 0:
+        des_archive_root = "/taiga/des_archive"
+        deca_archive_root = "/taiga/deca_archive"
+    elif address.find('spt3g') >= 0:
+        des_archive_root = "/des_archive/"
+        deca_archive_root = "/deca_archive/"
+    else:
+        des_archive_root = "/des_archive/"
+        deca_archive_root = "/deca_archive/"
+        logger.warning(f"archive_root undefined for: {address} -- will use defaults")
+
+    if tag == 'Y6A2':
+        LOGGER.debug(f"Getting des_archive root: {des_archive_root}\n")
+        return des_archive_root
+    if tag == 'DR3':
+        LOGGER.debug(f"Getting deca_archive root: {deca_archive_root}\n")
+        return deca_archive_root

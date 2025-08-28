@@ -140,6 +140,8 @@ def create_logger(logger=None, MP=False, logfile=None,
     logging.basicConfig(handlers=logger.handlers, level=level)
     logger.propagate = False
     logger.info(f"Logging Created at level:{level}")
+    if logfile:
+        logger.info(f"Will write log to file: {logfile}")
     return logger
 
 
@@ -727,18 +729,19 @@ def color_radec(ra, dec, avail_bands,
         fitsfiles.append("%s" % fitsthumb)
 
     # Build the cmd to call
-    logfile = get_thumbLogName(ra, dec, prefix=prefix, ext='stifflog', outdir=outdir)
-    log = open(logfile, "w")
     cmd = make_stiff_call(fitsfiles, tiffname, stiff_parameters=stiff_parameters, list=False)
     LOGGER.info(f"RUNNING STIFF CMD:\n{cmd}")
-    status = subprocess.call(cmd, shell=True, stdout=log, stderr=log)
-    if status > 0:
-        LOGGER.error("***ERROR while running Stiff***")
+    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+
+    if result.stdout:
+        LOGGER.info(result.stdout.strip())
+    if result.stderr:
+        LOGGER.error(result.stderr.strip())
+
+    if result.returncode > 0:
+        LOGGER.error("ERROR while running Stiff")
     else:
-        LOGGER.info(f"# Total stiff time: {elapsed_time(t0)}")
-
-    # ----------------------------------- ##
-
+        LOGGER.info(f"Total stiff time: {elapsed_time(t0)}")
     return
 
 
