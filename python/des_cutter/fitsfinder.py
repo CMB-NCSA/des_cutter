@@ -1,4 +1,3 @@
-import collections
 import socket
 import numpy
 import os
@@ -70,53 +69,6 @@ def check_xysize(df, args, nobj):
     return xsize, ysize
 
 
-def query2dict_of_columns(query, con, array=False):
-    """
-    Transforms the result of an SQL query and a Database handle object [dhandle]
-    into a dictionary of list or numpy arrays if array=True
-    """
-    # Get the cursor from the DB handle
-    # cur = dbhandle.cursor()
-    # # Execute
-    result = con.execute(query)
-    # Get them all at once
-    list_of_tuples = result.fetchall()
-    # Get the description of the columns to make the dictionary
-    desc = [d[0] for d in result.description]
-
-    querydic = collections.OrderedDict()  # We will populate this one
-    cols = list(zip(*list_of_tuples))
-    for k, val in enumerate(cols):
-        key = desc[k]
-        if array:
-            if isinstance(val[0], str):
-                querydic[key] = numpy.array(val, dtype=object)
-            else:
-                querydic[key] = numpy.array(val)
-        else:
-            querydic[key] = cols[k]
-    return querydic
-
-
-def query2rec(query, dbhandle):
-    """
-    Queries DB and returns results as a numpy recarray.
-    """
-    # Get the cursor from the DB handle
-    cur = dbhandle.cursor()
-    # Execute
-    cur.execute(query)
-    tuples = cur.fetchall()
-
-    # Return rec array
-    if tuples:
-        names = [d[0] for d in cur.description]
-        return numpy.rec.array(tuples, names=names)
-    logger.error("# DB Query in query2rec() returned no results")
-    msg = f"# Error with query:{query}"
-    raise RuntimeError(msg)
-
-
 def find_tilename_radec(ra, dec, con, tag='Y6A2'):
     """
     Find the DES coadd tile name that contains the given RA and DEC position.
@@ -137,13 +89,12 @@ def find_tilename_radec(ra, dec, con, tag='Y6A2'):
     else:
         ra180 = ra
     query = QUERY_TILENAME_RADEC.format(RA=ra, DEC=dec, RA180=ra180, TAG=tag)
-    tilenames_dict = query2dict_of_columns(query, con, array=False)
-
-    if len(tilenames_dict) < 1:
+    tilenames_df = pandas.read_sql(query, con)
+    if len(tilenames_df) < 1:
         LOGGER.warning(f"No tile found at ra:{ra}, dec:{dec}\n")
         return False
     else:
-        return tilenames_dict['TILENAME'][0]
+        return tilenames_df['TILENAME'][0]
 
 
 def find_tilenames_radec(ra, dec, con, tag='Y6A2'):
@@ -249,26 +200,40 @@ def get_coaddfiles_tilename(tilename, dbh, tag='Y6A2', bands='all'):
 
     query = QUERY_COADDFILES.format(TILENAME=tilename, and_BANDS=and_bands, TAG=tag)
     LOGGER.info(f"Running query: {query}")
-    rec = query2rec(query, dbh)
-    # Return a record array with the query
-    return rec
+    rec = pandas.read_sql(query, dbh)
+    if len(rec) < 1:
+        LOGGER.warning(f"No coadd files found tilename: {tilename}")
+        return False
+    else:
+        return rec
 
 
-def get_archive_root():
+def get_archive_root(tag):
     """Function retreives the archive root"""
 
     if 'DES_ARCHIVE_ROOT' in os.environ:
         archive_root = os.environ['DES_ARCHIVE_ROOT']
+        LOGGER.debug(f"Getting the archive root: {archive_root}\n")
+        return archive_root
+
+    if tag == 'DR3':
+        name = 'deca'
+    elif tag == 'Y6A2':
+        name = 'des'
     else:
-        # Try to auto-figure out from location
-        address = socket.getfqdn()
-        if address.find('cosmology.illinois.edu') >= 0:
-            archive_root = '/archive_data/desarchive/OPS_Taiga/'
-        elif address.find('spt3g') >= 0:
-            archive_root = '/des_archive/'
-        else:
-            logger.warning(f"archive_root undefined for: {address}")
-            archive_root = ''
+        msg = "TAG: {tag} not defined"
+        LOGGER.error(msg)
+        raise NameError(msg)
+
+    # Try to auto-figure out from location
+    address = socket.getfqdn()
+    if address.find('cosmology.illinois.edu') >= 0:
+        archive_root = f"/taiga/{name}_archive"
+    elif address.find('spt3g') >= 0:
+        archive_root = f"/{name}_archive/"
+    else:
+        logger.warning(f"archive_root undefined for: {address}")
+        archive_root = f"/{name}_archive/"
 
     LOGGER.debug(f"Getting the archive root: {archive_root}\n")
     return archive_root

@@ -56,7 +56,7 @@ dbh = oracledb.connect(user=creds['user'],
 query = {}
 query['DR3_COADDTILE_GEOM'] = "SELECT * FROM COADDTILE_GEOM"
 query['DR3_COADD_IMAGE_FILEPATH'] = """
-select c.FILENAME, c.TILENAME, c.BAND, f.PATH, f.COMPRESSION,
+select c.FILENAME, c.TILENAME, c.BAND, c.FILETYPE, f.PATH, f.COMPRESSION,
        t.CROSSRA0, t.RACMIN, t.RACMAX, t.DECCMIN, t.DECCMAX,
        t.RA_CENT, t.DEC_CENT, t.RA_SIZE, t.DEC_SIZE,
        t.RAC1, t.RAC2, t.RAC3, t.RAC4, t.DECC1, t.DECC2, t.DECC3, t.DECC4
@@ -115,6 +115,7 @@ select c.FILENAME, f.PATH, c.FILETYPE, c.BAND, c.CCDNUM
 tables = query.keys()
 # tables = ['DR3_COADD_TIFF_FILEPATH']
 # tables = ['DR3_FINALCUT_IMAGE_FILEPATH']
+# tables = ['DR3_COADD_IMAGE_FILEPATH']
 for parquet_name in tables:
     t0 = time.time()
     q = query[parquet_name]
@@ -128,7 +129,7 @@ for parquet_name in tables:
 con = duckdb.connect("decade_metadata.duckdb")
 for parquet_name in tables:
     t0 = time.time()
-    query = f"CREATE TABLE {parquet_name} AS SELECT * FROM '{parquet_name}.parquet'"
+    query = f"CREATE OR REPLACE TABLE {parquet_name} AS SELECT * FROM '{parquet_name}.parquet'"
     con.execute(query)
     print(f"Wrote DuckDB table: {parquet_name} in {elapsed_time(t0)}[s]")
 

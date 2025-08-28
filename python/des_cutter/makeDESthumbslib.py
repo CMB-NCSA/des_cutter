@@ -108,7 +108,7 @@ def cmdline():
     # Logic for MP and NP
     # Get the number of processors to use
     args.NP = thumbslib.get_NP(args.np)
-    if args.NP > 1 or args.MP:
+    if args.NP > 1:
         args.MP = True
     else:
         args.MP = False
@@ -166,7 +166,7 @@ def run_finalcut(args):
     dbh = duckdb.connect(args.dbname, read_only=True)
 
     # Get archive_root
-    archive_root = fitsfinder.get_archive_root()
+    archive_root = fitsfinder.get_archive_root(args.tag)
 
     # Get the number of processors to use
     if args.NP > 1:
@@ -243,7 +243,7 @@ def run_coadd(args):
     dbh = duckdb.connect(args.dbname, read_only=True)
 
     # Get archive_root
-    archive_root = fitsfinder.get_archive_root()
+    archive_root = fitsfinder.get_archive_root(args.tag)
 
     # Find all of the tilenames, indices grouped per tile
     logger.info("Finding tilename for each input position")
@@ -292,7 +292,7 @@ def run_coadd(args):
         for k in range(n_filenames):
 
             # Rebuild the full filename with COMPRESSION if present
-            if 'COMPRESSION' in filenames.dtype.names:
+            if 'COMPRESSION' in filenames.columns:
                 filename = os.path.join(archive_root, filenames.PATH[k], filenames.FILENAME[k])+filenames.COMPRESSION[k]
             else:
                 filename = os.path.join(archive_root, filenames.PATH[k])
