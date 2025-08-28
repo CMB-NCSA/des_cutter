@@ -1,8 +1,5 @@
 #!/usr/bin/env python
 
-import configparser
-import oracledb
-import os
 import pandas as pd
 import duckdb
 import time

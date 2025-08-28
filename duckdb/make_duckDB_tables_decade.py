@@ -113,8 +113,8 @@ select c.FILENAME, f.PATH, c.FILETYPE, c.BAND, c.CCDNUM
 
 # The longer way, queries + parquet at the same time
 tables = query.keys()
-tables = ['DR3_COADD_TIFF_FILEPATH']
-tables = ['DR3_FINALCUT_IMAGE_FILEPATH']
+# tables = ['DR3_COADD_TIFF_FILEPATH']
+# tables = ['DR3_FINALCUT_IMAGE_FILEPATH']
 for parquet_name in tables:
     t0 = time.time()
     q = query[parquet_name]
