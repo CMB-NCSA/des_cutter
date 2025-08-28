@@ -212,28 +212,29 @@ def get_archive_root(tag):
     """Function retreives the archive root"""
 
     if 'DES_ARCHIVE_ROOT' in os.environ:
-        archive_root = os.environ['DES_ARCHIVE_ROOT']
-        LOGGER.debug(f"Getting the archive root: {archive_root}\n")
-        return archive_root
+        des_archive_root = os.environ['DES_ARCHIVE_ROOT']
+        LOGGER.debug(f"Getting DES archive root: {des_archive_root}\n")
 
-    if tag == 'DR3':
-        name = 'deca'
-    elif tag == 'Y6A2':
-        name = 'des'
-    else:
-        msg = "TAG: {tag} not defined"
-        LOGGER.error(msg)
-        raise NameError(msg)
+    if 'DECA_ARCHIVE_ROOT' in os.environ:
+        deca_archive_root = os.environ['DECA_ARCHIVE_ROOT']
+        LOGGER.debug(f"Getting DECA archive root: {deca_archive_root}\n")
 
     # Try to auto-figure out from location
     address = socket.getfqdn()
     if address.find('cosmology.illinois.edu') >= 0:
-        archive_root = f"/taiga/{name}_archive"
+        des_archive_root = "/taiga/des_archive"
+        deca_archive_root = "/taiga/deca_archive"
     elif address.find('spt3g') >= 0:
-        archive_root = f"/{name}_archive/"
+        des_archive_root = "/des_archive/"
+        deca_archive_root = "/deca_archive/"
     else:
-        logger.warning(f"archive_root undefined for: {address}")
-        archive_root = f"/{name}_archive/"
+        des_archive_root = "/des_archive/"
+        deca_archive_root = "/deca_archive/"
+        logger.warning(f"archive_root undefined for: {address} -- will use defaults")
 
-    LOGGER.debug(f"Getting the archive root: {archive_root}\n")
-    return archive_root
+    if tag == 'Y6A2':
+        LOGGER.debug(f"Getting des_archive root: {des_archive_root}\n")
+        return des_archive_root
+    if tag == 'DR3':
+        LOGGER.debug(f"Getting deca_archive root: {deca_archive_root}\n")
+        return deca_archive_root
