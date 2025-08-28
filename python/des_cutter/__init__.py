@@ -1,5 +1,5 @@
 __author__ = "Felipe Menanteau"
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 version = __version__
 
 from . thumbslib  import *
