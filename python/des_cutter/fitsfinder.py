@@ -146,7 +146,7 @@ def find_finalcut_images(ra, dec, dbh, bands=None, date_start=None, date_end=Non
 def get_query_finalcut(ra, dec, tag='Y6A2', bands=None, date_start=None, date_end=None):
 
     query_FINALCUTFILES = """
-    select FILENAME, COMPRESSION, PATH, BAND, EXPTIME, NITE, EXPNUM, DATE_OBS, MJD_OBS
+    select FILENAME, COMPRESSION, PATH, BAND, EXPTIME, NITE, EXPNUM, DATE_OBS, MJD_OBS, MAG_ZERO, SIGMA_MAG_ZERO
     from {TAG}_FINALCUT_IMAGE_FILEPATH
       where
       ((CROSSRA0='N' AND ({RA} BETWEEN RACMIN and RACMAX) AND ({DEC} BETWEEN DECCMIN and DECCMAX)) OR

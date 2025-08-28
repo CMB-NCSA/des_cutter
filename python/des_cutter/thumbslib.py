@@ -426,7 +426,8 @@ def get_NP(MP):
 
 
 def fitscutter(filename, ra, dec, objID=None, xsize=1.0, ysize=1.0, units='arcmin',
-               prefix=PREFIX, outdir=None, tilename=None, counter='', logger=None):
+               prefix=PREFIX, outdir=None, tilename=None, counter='',
+               mag_zero=None, sigma_mag_zero=None, logger=None):
 
     """
     Makes cutouts around ra, dec for a give xsize and ysize
@@ -619,6 +620,12 @@ def fitscutter(filename, ra, dec, objID=None, xsize=1.0, ysize=1.0, units='arcmi
             # Add the objID to the header of the thumbnail
             rec = {'name': 'OBJECT', 'value': objID[k], 'comment': 'Name of the objID'}
             h_section[EXTNAME].add_record(rec)
+            if EXTNAME == 'SCI' and mag_zero is not None:
+                rec = {'name': 'MAG_ZERO', 'value': mag_zero, 'comment': 'Zero point in AB magnitudes'}
+                h_section[EXTNAME].add_record(rec)
+            if EXTNAME == 'SCI' and sigma_mag_zero is not None:
+                rec = {'name': 'SIG_ZERO', 'value': sigma_mag_zero, 'comment': 'Sigma of zero point in AB magnitudes'}
+                h_section[EXTNAME].add_record(rec)
 
         # Get the basedir
         basedir = get_thumbBaseDirName(ra[k], dec[k], objID=objID[k], prefix=prefix, outdir=outdir)

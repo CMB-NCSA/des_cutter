@@ -194,6 +194,8 @@ def run_finalcut(args):
             counter = f"{k+1}/{Nfiles} files"
             ar = (filename, ra_val, dec_val)
             kw = {'xsize': xsize[i], 'ysize': ysize[i],
+                  'mag_zero': df.MAG_ZERO[k],
+                  'sigma_mag_zero': df.SIGMA_MAG_ZERO[k],
                   'units': 'arcmin', 'prefix': args.prefix,
                   'outdir': args.outdir, 'counter': counter}
 
