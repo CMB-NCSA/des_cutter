@@ -124,6 +124,7 @@ for parquet_name in tables:
     print(f"-- Done with query in {elapsed_time(t0)}[s]")
     if 'PATH' in df.columns:
         df['PATH'] = df['PATH'].str.replace('DEC_Taiga/', 'DEC/', regex=False)
+        df['PATH'] = df['PATH'].str.replace('ACT_Taiga/', 'ACT/', regex=False)
     df.to_parquet(f"{parquet_name}.parquet", engine="pyarrow", compression="snappy", index=True)
 
 con = duckdb.connect("decade_metadata.duckdb")
@@ -153,8 +154,7 @@ for parquet_name in tables:
     print(f"-- Done loading in: {elapsed_time(t0)}[s]")
     if 'PATH' in df.columns:
         df['PATH'] = df['PATH'].str.replace('DEC_Taiga/', 'DEC/', regex=False)
-        df['PATH'] = df['PATH'].str.replace('OPS_Taiga/', '', regex=False)
-
+        df['PATH'] = df['PATH'].str.replace('ACT_Taiga/', 'ACT/', regex=False)
     con.register('df_view', df)
     t1 = time.time()
     q = f"CREATE OR REPLACE TABLE {parquet_name} AS SELECT * FROM df_view"

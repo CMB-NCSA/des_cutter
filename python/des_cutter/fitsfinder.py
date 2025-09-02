@@ -69,7 +69,7 @@ def check_xysize(df, args, nobj):
     return xsize, ysize
 
 
-def find_tilename_radec(ra, dec, con, tag='Y6A2'):
+def find_tilename_radec(ra, dec, con, tag=None):
     """
     Find the DES coadd tile name that contains the given RA and DEC position.
     This function queries Oracle database to determine which coadd tile the sky coordinate (RA, DEC)
@@ -97,7 +97,7 @@ def find_tilename_radec(ra, dec, con, tag='Y6A2'):
         return tilenames_df['TILENAME'][0]
 
 
-def find_tilenames_radec(ra, dec, con, tag='Y6A2'):
+def find_tilenames_radec(ra, dec, con, tag=None):
     """
     Find the tilename for each ra,dec and bundle them as dictionaries per tilename
     """
@@ -124,14 +124,14 @@ def find_tilenames_radec(ra, dec, con, tag='Y6A2'):
     return tilenames, indices, tilenames_matched
 
 
-def find_finalcut_images(ra, dec, dbh, bands=None, date_start=None, date_end=None):
+def find_finalcut_images(ra, dec, dbh, tag=None, bands=None, date_start=None, date_end=None):
     """
     Find the FINALCUT images via sql query
     """
     results = []
     for k, (ra_val, dec_val) in enumerate(zip(ra, dec)):
         # Get the formatted query for ra, dec, dates and bands
-        query = get_query_finalcut(ra_val, dec_val, bands=bands, date_start=date_start, date_end=date_end)
+        query = get_query_finalcut(ra_val, dec_val, tag=tag, bands=bands, date_start=date_start, date_end=date_end)
         LOGGER.debug(f"Will run query:\n{query}\n")
         # Load into a pandas df
         df = pandas.read_sql(query, con=dbh)

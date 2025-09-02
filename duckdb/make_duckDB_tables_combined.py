@@ -44,6 +44,7 @@ def make_db(tables, dbname):
         print(f"Done loading in: {elapsed_time(t1)}[s]")
         if 'PATH' in df.columns:
             df['PATH'] = df['PATH'].str.replace('DEC_Taiga/', 'DEC/', regex=False)
+            df['PATH'] = df['PATH'].str.replace('ACT_Taiga/', 'ACT/', regex=False)
             df['PATH'] = df['PATH'].str.replace('OPS_Taiga/', '', regex=False)
 
         con.register('df_view', df)

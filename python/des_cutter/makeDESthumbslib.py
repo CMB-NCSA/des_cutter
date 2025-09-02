@@ -53,7 +53,7 @@ def cmdline():
                         "(uses all bands, and is the default), or a list of individual bands")
     parser.add_argument("--prefix", type=str, action='store', default=thumbslib.PREFIX,
                         help=f"Prefix for thumbnail filenames [default={thumbslib.PREFIX}]")
-    parser.add_argument("--tag", type=str, action='store', default='Y6A2',
+    parser.add_argument("--tag", type=str, action='store', default='Y6A2', choices=['Y6A2', 'DR3'],
                         help="Table TAG to use [default='Y6A2'")
     parser.add_argument("--date_start", type=str, action='store', default=None,
                         help="The START date to search for files formatted [YYYY-MM-DD]")
@@ -180,6 +180,7 @@ def run_finalcut(args):
     df_images = fitsfinder.find_finalcut_images(ra, dec, dbh,
                                                 date_start=args.date_start,
                                                 date_end=args.date_end,
+                                                tag=args.tag,
                                                 bands=args.bands)
     # Close the DB connection
     dbh.close()

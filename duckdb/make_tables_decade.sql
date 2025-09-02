@@ -42,7 +42,7 @@ select i.FILENAME, f.PATH, f.COMPRESSION, i.BAND, i.EXPTIME, i.AIRMASS, i.FWHM, 
    and p.pfw_attempt_id = i.pfw_attempt_id
    and i.EXPNUM=e.EXPNUM
    and i.FILENAME=f.FILENAME
-   and i.FILETYPE='red_immask' and ROWNUM < 10000;
+   and i.FILETYPE='red_immask' and ROWNUM < 30;
 
 -- FINALCUT CATALOGS
 select c.FILENAME, f.PATH, c.FILETYPE, c.BAND, c.CCDNUM, c.PFW_ATTEMPT_ID
