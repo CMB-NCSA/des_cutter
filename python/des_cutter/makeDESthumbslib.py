@@ -15,7 +15,18 @@ from des_cutter import fitsfinder
 from des_cutter import thumbslib
 
 
-def cmdline():
+def cmdline(config=None):
+
+    # 0. Check if we're receving an argument and load it up
+    conf_defaults = {}
+    if config is not None:
+        if isinstance(config, dict):
+            conf_defaults.update(config)
+        elif os.path.isfile(config):
+            print(f"Will load configuration file: {config}")
+            conf_defaults.update(yaml.safe_load(open(config)))
+        else:
+            raise ValueError('config object is not a dictionary or file')
 
     # 1. Make a proto-parse use to read in the default yaml configuration
     # file, Turn off help, so we print all options in response to -h
@@ -24,9 +35,7 @@ def cmdline():
     args, remaining_argv = conf_parser.parse_known_args()
     # If we have -c or --config, then we proceed to read it
     if args.configfile:
-        conf_defaults = yaml.safe_load(open(args.configfile))
-    else:
-        conf_defaults = {}
+        conf_defaults.update(yaml.safe_load(open(args.configfile)))
 
     # 2. This is the main parser
     parser = argparse.ArgumentParser(description="Retrieves FITS fits within DES/DECADE and creates thumbnails for a list \
@@ -34,7 +43,7 @@ def cmdline():
                                      # Inherit options from config_parser
                                      parents=[conf_parser])
     # The positional arguments
-    parser.add_argument("inputList", help="Input CSV file with positions (RA,DEC)"
+    parser.add_argument("--inputList", help="Input CSV file with positions (RA,DEC)"
                         "and optional (XSIZE,YSIZE) in arcmins")
     # Coadd and finalcut
     parser.add_argument("--coadd", action="store_true", default=False,
@@ -91,6 +100,10 @@ def cmdline():
     # Update  variables in config with actual values
     args.__dict__ = regexlib.replace_variables_in_dict(args.__dict__)
     args.loglevel = getattr(logging, args.loglevel)
+
+    if args.inputList is None:
+        raise ValueError('inputList needs to be defined')
+
     # Make sure that both date_start/end are defined or both are None
     if args.date_start is None and args.date_end is None:
         pass

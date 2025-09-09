@@ -7,7 +7,16 @@ import logging
 
 if __name__ == "__main__":
     # Get the command-line arguments
-    args = des_cutter.makeDESthumbslib.cmdline()
+    d = {'coadd': True,
+         'inputList': '/home/felipe/des-cutout/des_cutter/etc/example_one_radec.csv',
+         'np': 0,
+         'date_start': '2013-10-25',
+         'date_end': '2013-12-31',
+         'finalcut': True,
+         'coadd': True,
+         'dbname': '/data/des/dblib/desdecade_lite_metadata.duckdb',
+         'outdir': '/home/felipe/new_test'}
+    args = des_cutter.makeDESthumbslib.cmdline("/home/felipe/des-cutout/des_cutter/etc/config_example.yaml")
     # Run the maker
     try:
         des_cutter.makeDESthumbslib.run(args)
@@ -18,5 +27,6 @@ if __name__ == "__main__":
         # write string into log
         for line in string_trace:
             LOGGER.error(line)
+
         # Finally raise
         raise

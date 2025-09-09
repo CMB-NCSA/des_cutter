@@ -1,4 +1,5 @@
 # Configuration file example
+inputList: /home/felipe/des-cutout/des_cutter/etc/example_one_radec.csv
 outdir: /home/felipe/new_test
 dbname: /data/des/dblib/desdecade_lite_metadata.duckdb
 date_start: 2013-10-25
