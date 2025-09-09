@@ -6,3 +6,4 @@
 *.duckdb
 *.fits
 *.fits.fz
+*.filenames
